@@ -1,0 +1,5 @@
+peewee==3.2.2
+psycopg2==2.7.4
+psycopg2-binary==2.7.4
+python-dateutil==2.7.2
+six==1.11.0
