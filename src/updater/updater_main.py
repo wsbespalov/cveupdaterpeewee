@@ -8,6 +8,7 @@ from dateutil.parser import parse as parse_datetime
 from configuration import DB
 from configuration import SOURCES
 
+from datetime import datetime
 
 from get_files import get_file
 
@@ -215,15 +216,11 @@ def progressbar(it, prefix="Processing ", size=50):
 # ----------------------------------------------------------------------------
 
 def action_update_cwe():
-    # database.connect()
-    # try:
-    #     INFO.create_table()
-    # except peewee.OperationalError as operation_error:
-    #     print('INFO Table already exists')
+    database.connect()
 
-    if not CWE_VULNERS.table_exists():
-        CWE_VULNERS.create_table()
+    INFO.create_table()
 
+    CWE_VULNERS.create_table()
 
     start_time = time.time()
     parsed_items = []
@@ -238,6 +235,7 @@ def action_update_cwe():
         data, response = get_file(getfile=source)
     except:
         print('Update Database CWE: Cant download file: {}'.format(source))
+        database.close()
         return dict(
             items=0,
             time_delta=0,
@@ -247,7 +245,13 @@ def action_update_cwe():
     last_modified = parse_datetime(response.headers['last-modified'], ignoretz=True)
 
     info, created = INFO.get_or_create(name="cwe")
-    info_last_modified = info.last_modified
+    if not created:
+        if info.last_modified != "":
+            info_last_modified = datetime.strptime(info.last_modified, '%Y-%m-%d %H:%M:%S')
+        else:
+            info_last_modified = datetime.strptime(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+    else:
+        info_last_modified = datetime.strptime(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
 
     if info_last_modified != last_modified:
         info.last_modified = last_modified
@@ -260,38 +264,50 @@ def action_update_cwe():
             parsed_items.append(cwe)
 
         for item in progressbar(parsed_items, prefix="Update Database CWE: "):
-            id = "CWE-" + item["id"]
-            print(id+' ')
+            item_id = "CWE-" + item["id"]
 
-            cwe_selected = CWE_VULNERS.select().where(item == id).first()
+            item_name = item.get("name", "")
+            item_status = item.get("status", "")
+            item_weaknessabs = item.get("weaknessabs", "")
+            item_description_summary = item.get("description_summary", "")
+
+            cwe_selected = CWE_VULNERS.get_or_none(CWE_VULNERS.item == item_id)
 
             if cwe_selected is None:
-                cwe_created = CWE_VULNERS()
-                cwe_created.item = id,
-                cwe_created.name = item["name"],
-                cwe_created.status=item["status"],
-                cwe_created.weaknessabs=item["weaknessabs"],
-                cwe_created.description_summary=item["description_summary"]
+                cwe_created = CWE_VULNERS(
+                    item=item_id,
+                    name=item_name,
+                    status=item_status,
+                    weaknessabs=item_weaknessabs,
+                    description_summary=item_description_summary
+                )
                 cwe_created.save()
+
             else:
-                if cwe_selected.name == item["name"] and \
-                    cwe_selected.status == item["status"] and \
-                    cwe_selected.weaknessabs == item["weaknessabs"] and \
-                    cwe_selected.description_summary == item["description_summary"]:
+                if cwe_selected.name == item_name and \
+                    cwe_selected.status == item_status and \
+                    cwe_selected.weaknessabs == item_weaknessabs and \
+                        cwe_selected.description_summary == item_description_summary:
                     pass
-                    print('pass')
                 else:
-                    cwe_selected.name = item["name"]
-                    cwe_selected.status=item["status"]
-                    cwe_selected.weaknessabs=item["weaknessabs"]
-                    cwe_selected.description_summary=item["description_summary"]
+                    cwe_selected.name = item_name
+                    cwe_selected.status=item_status
+                    cwe_selected.weaknessabs=item_weaknessabs
+                    cwe_selected.description_summary=item_description_summary
                     cwe_selected.save()
+
         stop_time = time.time()
+
+        database.close()
+
         return dict(
             items=len(parsed_items),
             time_delta=stop_time - start_time,
             message="Update Database CWE: Complete."
         )
+
+    database.close()
+
     return dict(
         items=0,
         time_delta=0,
@@ -300,15 +316,10 @@ def action_update_cwe():
 
 def action_update_cpe():
     database.connect()
-    try:
-        INFO.create_table()
-    except peewee.OperationalError as operation_error:
-        print('INFO Table already exists')
 
-    try:
-        CPE_VULNERS.create_table()
-    except peewee.OperationalError as operation_error:
-        print('CPE Table already exists')
+    INFO.create_table()
+
+    CPE_VULNERS.create_table()
 
     start_time = time.time()
     parsed_items = []
@@ -323,6 +334,7 @@ def action_update_cpe():
         data, response = get_file(getfile=source)
     except:
         print('Update Database CPE: Cant download file: {}'.format(source))
+        database.close()
         return dict(
             items=0,
             time_delta=0,
@@ -332,7 +344,13 @@ def action_update_cpe():
     last_modified = parse_datetime(response.headers['last-modified'], ignoretz=True)
 
     info, created = INFO.get_or_create(name="cpe")
-    info_last_modified = info.last_modified
+    if not created:
+        if info.last_modified != "":
+            info_last_modified = datetime.strptime(info.last_modified, '%Y-%m-%d %H:%M:%S')
+        else:
+            info_last_modified = datetime.strptime(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+    else:
+        info_last_modified = datetime.strptime(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
 
     if info_last_modified != last_modified:
         info.last_modified = last_modified
@@ -349,32 +367,50 @@ def action_update_cpe():
             parsed_items.append(cpe)
 
         for item in progressbar(parsed_items, prefix="Update Database CPE: "):
-            id = item["id"]
-            print(id)
-            cpe = CPE_VULNERS.get_or_none(CPE_VULNERS.item == id)
-            if cpe is None:
-                cpe = CPE_VULNERS.insert(
-                    item=str(id),
-                    title=item["title"],
-                    refs=item.get("references", []),
-                    cpe22=item["cpe_2_2"],
-                    cpe23=str(id)
-                ).execute()
+            item_id = item["id"]
+            item_title = item.get("title", "")
+            item_refs = item.get("references", [])
+            item_cpe22 = item.get("cpe_2_2", "")
+            item_cpe23 = item_id
+
+            cpe_selected = CPE_VULNERS.get_or_none(CPE_VULNERS.item == item_id)
+
+            if cpe_selected is None:
+                cpe_created = CPE_VULNERS(
+                    item=item_id,
+                    title=item_title,
+                    refs=item_refs,
+                    cpe22=item_cpe22,
+                    cpe23=item_cpe23
+                )
+                cpe_created.save()
+
             else:
-                cpe = CPE_VULNERS.update(
-                    item=str(id),
-                    title=item["title"],
-                    refs=item.get("references", []),
-                    cpe22=item["cpe_2_2"],
-                    cpe23=str(id)
-                ).execute()
-                pass
+                if cpe_selected.title == item_title and \
+                    cpe_selected.refs == item_refs and \
+                    cpe_selected.cpe22 == item_cpe22 and \
+                        cpe_selected.cpe23 == item_cpe23:
+                    pass
+
+                else:
+                    cpe_selected.title = item_title,
+                    cpe_selected.refs = item_refs,
+                    cpe_selected.cpe22 = item_cpe22,
+                    cpe_selected.cpe23 = item_cpe23
+                    cpe_selected.save()
+
         stop_time = time.time()
+
+        database.close()
+
         return dict(
             items=len(parsed_items),
             time_delta=stop_time - start_time,
-            message="Update Database CWE: Complete."
+            message="Update Database CPE: Complete."
         )
+
+    database.close()
+
     return dict(
         items=0,
         time_delta=0,
@@ -383,16 +419,10 @@ def action_update_cpe():
 
 def action_update_d2sec():
     database.connect()
-    try:
-        INFO.create_table()
-    except peewee.OperationalError as operation_error:
-        print('INFO Table already exists')
 
-    try:
-        D2SEC_VULNERS.create_table()
+    INFO.create_table()
 
-    except peewee.OperationalError as operation_error:
-        print('D2SEC Table already exists')
+    D2SEC_VULNERS.create_table()
 
     start_time = time.time()
     parsed_items = []
@@ -407,6 +437,7 @@ def action_update_d2sec():
         data, response = get_file(getfile=source)
     except:
         print('Update Database D2SEC: Cant download file: {}'.format(source))
+        database.close()
         return dict(
             items=0,
             time_delta=0,
@@ -416,7 +447,13 @@ def action_update_d2sec():
     last_modified = parse_datetime(response.headers['last-modified'], ignoretz=True)
 
     info, created = INFO.get_or_create(name="d2sec")
-    info_last_modified = info.last_modified
+    if not created:
+        if info.last_modified != "":
+            info_last_modified = datetime.strptime(info.last_modified, '%Y-%m-%d %H:%M:%S')
+        else:
+            info_last_modified = datetime.strptime(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+    else:
+        info_last_modified = datetime.strptime(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
 
     if info_last_modified != last_modified:
         info.last_modified = last_modified
@@ -426,34 +463,40 @@ def action_update_d2sec():
 
         for item in progressbar(ch.d2sec, prefix="Update Database D2SEC: "):
             parsed_items.append(item)
-            id = item["id"]
-            print(id)
-            d2sec, created = D2SEC_VULNERS.get_or_create(item=id)
-            d2sec.item = str(id)
-            d2sec.name = str(item["name"])
-            d2sec.url = str(item["url"])
-            d2sec.save()
-            # d2sec = D2SEC_VULNERS.get_or_none(D2SEC_VULNERS.item == id)
-            # if d2sec is None:
-            #     print('+')
-            #     d2sec = D2SEC_VULNERS.insert(
-            #         item=str(id),
-            #         name=item["name"],
-            #         url=item.get("url", ""),
-            #     ).execute()
-            # else:
-            #     print('-')
-            #     d2sec = D2SEC_VULNERS.update(
-            #         item=str(id),
-            #         name=item["name"],
-            #         url=item.get("url", ""),
-            #     ).execute()
+            item_id = item["id"]
+            item_name = item.get("name", "")
+            item_url = item.get("url", "")
+
+            d2sec_selected = D2SEC_VULNERS.get_or_none(D2SEC_VULNERS.item == item_id)
+
+            if d2sec_selected is None:
+                d2sec_created = D2SEC_VULNERS(
+                    item=item_id,
+                    name=item_name,
+                    url=item_url
+                )
+                d2sec_created.save()
+            else:
+                if d2sec_selected.name == item_name and \
+                        d2sec_selected.url == item_url:
+                    pass
+                else:
+                    d2sec_selected.name = item_name
+                    d2sec_selected.url = item_url
+                    d2sec_selected.save()
+
         stop_time = time.time()
+
+        database.close()
+
         return dict(
             items=len(parsed_items),
             time_delta=stop_time - start_time,
             message="Update Database D2SEC: Complete."
         )
+
+    database.close()
+
     return dict(
         items=0,
         time_delta=0,
@@ -463,9 +506,8 @@ def action_update_d2sec():
 
 if __name__ == '__main__':
     print(action_update_cwe())
-    # print(action_update_d2sec())
-    # print(action_update_cpe())
-    # print(CPE_VULNERS.get_or_none(item='123'))
+    print(action_update_d2sec())
+    print(action_update_cpe())
 
 
     pass

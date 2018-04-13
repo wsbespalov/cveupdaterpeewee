@@ -13,6 +13,9 @@ class D2SEC_VULNERS(peewee.Model):
     class Meta:
         database = database
         table_name = "d2sec_vulners"
+    id = peewee.PrimaryKeyField(
+        null=False
+    )
     item = peewee.TextField(
         default="",
         verbose_name="D2SEC ID"

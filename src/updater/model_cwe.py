@@ -2,8 +2,6 @@ import peewee
 
 import configuration as config
 
-# database = peewee.SqliteDatabase(config.DB.get("name", "db.sqlite"))
-
 database = peewee.PostgresqlDatabase(
     'updater_db',
     user='postgres',
@@ -16,6 +14,9 @@ class CWE_VULNERS(peewee.Model):
     class Meta:
         database = database
         table_name = "cwe_vulners"
+    id = peewee.PrimaryKeyField(
+        null=False
+    )
     item = peewee.TextField(
         unique=True,
         verbose_name="CWE ID"

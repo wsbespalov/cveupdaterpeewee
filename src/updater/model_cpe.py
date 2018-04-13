@@ -13,6 +13,9 @@ class CPE_VULNERS(peewee.Model):
     class Meta:
         database = database
         table_name = "cpe_vulners"
+    id = peewee.PrimaryKeyField(
+        null=False
+    )
     item = peewee.TextField(
         default="",
         verbose_name="CPE ID"
