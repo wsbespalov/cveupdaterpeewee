@@ -26,6 +26,8 @@ class CPE_VULNERS(peewee.Model):
     )
     refs = ArrayField(
         peewee.TextField,
+        default=[],
+        verbose_name="CPE references array"
     )
     cpe22 = peewee.TextField(
         default="",

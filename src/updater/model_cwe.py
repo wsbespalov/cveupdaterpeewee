@@ -1,7 +1,5 @@
 import peewee
 
-import configuration as config
-
 database = peewee.PostgresqlDatabase(
     'updater_db',
     user='postgres',
@@ -38,7 +36,7 @@ class CWE_VULNERS(peewee.Model):
         verbose_name="CWE Description"
     )
     def __unicode__(self):
-        return "INFO"
+        return "CWE"
     def __str__(self):
         return self.item
     @property
