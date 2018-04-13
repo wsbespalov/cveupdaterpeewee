@@ -215,16 +215,15 @@ def progressbar(it, prefix="Processing ", size=50):
 # ----------------------------------------------------------------------------
 
 def action_update_cwe():
-    database.connect()
-    try:
-        INFO.create_table()
-    except peewee.OperationalError as operation_error:
-        print('INFO Table already exists')
+    # database.connect()
+    # try:
+    #     INFO.create_table()
+    # except peewee.OperationalError as operation_error:
+    #     print('INFO Table already exists')
 
-    try:
+    if not CWE_VULNERS.table_exists():
         CWE_VULNERS.create_table()
-    except peewee.OperationalError as operation_error:
-        print('CWE Table already exists')
+
 
     start_time = time.time()
     parsed_items = []
@@ -262,14 +261,31 @@ def action_update_cwe():
 
         for item in progressbar(parsed_items, prefix="Update Database CWE: "):
             id = "CWE-" + item["id"]
-            print(id)
-            cwe, created = CWE_VULNERS.get_or_create(item=id)
-            cwe.item = id
-            cwe.name = item["name"]
-            cwe.status=item["status"]
-            cwe.weaknessabs=item["weaknessabs"]
-            cwe.description_summary=item["description_summary"]
-            cwe.save()
+            print(id+' ')
+
+            cwe_selected = CWE_VULNERS.select().where(item == id).first()
+
+            if cwe_selected is None:
+                cwe_created = CWE_VULNERS()
+                cwe_created.item = id,
+                cwe_created.name = item["name"],
+                cwe_created.status=item["status"],
+                cwe_created.weaknessabs=item["weaknessabs"],
+                cwe_created.description_summary=item["description_summary"]
+                cwe_created.save()
+            else:
+                if cwe_selected.name == item["name"] and \
+                    cwe_selected.status == item["status"] and \
+                    cwe_selected.weaknessabs == item["weaknessabs"] and \
+                    cwe_selected.description_summary == item["description_summary"]:
+                    pass
+                    print('pass')
+                else:
+                    cwe_selected.name = item["name"]
+                    cwe_selected.status=item["status"]
+                    cwe_selected.weaknessabs=item["weaknessabs"]
+                    cwe_selected.description_summary=item["description_summary"]
+                    cwe_selected.save()
         stop_time = time.time()
         return dict(
             items=len(parsed_items),
@@ -446,8 +462,8 @@ def action_update_d2sec():
 
 
 if __name__ == '__main__':
-    # print(action_update_cwe())
-    print(action_update_d2sec())
+    print(action_update_cwe())
+    # print(action_update_d2sec())
     # print(action_update_cpe())
     # print(CPE_VULNERS.get_or_none(item='123'))
 
