@@ -18,6 +18,7 @@ class CAPEC_VULNERS(peewee.Model):
     )
     item = peewee.TextField(
         unique=True,
+        default="",
         verbose_name="CAPEC ID"
     )
     name = peewee.TextField(
@@ -57,5 +58,7 @@ class CAPEC_VULNERS(peewee.Model):
         capec_data["related_weakness"] = self.related_weakness
         return capec_data
     def save(self, *args, **kwargs):
+        self.item = ''.join(filter(lambda x: x.isdigit(), self.item))
+        self.item = "CAPEC-" + self.item
         super(CAPEC_VULNERS, self).save(*args, **kwargs)
 CAPEC_VULNERS.add_index(CAPEC_VULNERS.item)
