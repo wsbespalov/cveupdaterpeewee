@@ -1,8 +1,3 @@
-
-DB = {
-    "name": "db.sqlite"
-}
-
 SOURCES = {
     "cve_modified": "https://nvd.nist.gov/feeds/json/cve/1.0/nvdcve-1.0-modified.json.gz",
     "cve_recent": "https://nvd.nist.gov/feeds/json/cve/1.0/nvdcve-1.0-recent.json.gz",
@@ -13,5 +8,13 @@ SOURCES = {
     "ms": "http://download.microsoft.com/download/6/7/3/673E4349-1CA5-40B9-8879-095C72D5B49D/BulletinSearch.xlsx",
     "d2sec": "http://www.d2sec.com/exploits/elliot.xml",
     "npm": "https://api.nodesecurity.io/advisories",
+}
+
+POSTGRES = {
+    "user": 'postgres',
+    "password": 'password',
+    "database": "updater_db",
+    "host": "localhost",
+    "port": "5432"
 }
 

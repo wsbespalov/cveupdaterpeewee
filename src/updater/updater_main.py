@@ -8,20 +8,24 @@ from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 from dateutil.parser import parse as parse_datetime
 
-from configuration import DB
+
+from configuration import POSTGRES
 from configuration import SOURCES
 
 from datetime import datetime
 
 from get_files import get_file
 
+
+
 database = peewee.PostgresqlDatabase(
-    'updater_db',
-    user='postgres',
-    password='password',
-    host='localhost',
-    port='5432'
+    POSTGRES.get("database", "updater_db"),
+    user=POSTGRES.get("user", "postgres"),
+    password=POSTGRES.get("password", "password"),
+    host=POSTGRES.get("host", "localhost"),
+    port=int(POSTGRES.get("port", 5432))
 )
+
 
 from model_info import INFO
 from model_cwe import CWE_VULNERS
@@ -1229,5 +1233,6 @@ if __name__ == '__main__':
     # print(action_update_capec())
 
     # print(action_update_npm())
+    print((action_update_cve()))
 
     pass

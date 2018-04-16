@@ -1,12 +1,16 @@
 import peewee
 
+from configuration import POSTGRES
+
 database = peewee.PostgresqlDatabase(
-    'updater_db',
-    user='postgres',
-    password='password',
-    host='localhost',
-    port='5432'
+    POSTGRES.get("database", "updater_db"),
+    user=POSTGRES.get("user", "postgres"),
+    password=POSTGRES.get("password", "password"),
+    host=POSTGRES.get("host", "localhost"),
+    port=int(POSTGRES.get("port", 5432))
 )
+
+
 
 class CWE_VULNERS(peewee.Model):
     class Meta:
