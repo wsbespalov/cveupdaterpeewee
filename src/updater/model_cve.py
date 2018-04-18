@@ -1,6 +1,8 @@
 import peewee
 from playhouse.postgres_ext import ArrayField
 
+import json
+
 from configuration import POSTGRES
 
 database = peewee.PostgresqlDatabase(
@@ -36,57 +38,62 @@ class CVE_VULNERS(peewee.Model):
         default="",
         verbose_name="CVE Data Version"
     )
-    assigner = peewee.TextField(
-        default="",
-        verbose_name="CVE ASSIGNER"
-    )
+    # assigner = peewee.TextField(
+    #     default="",
+    #     verbose_name="CVE ASSIGNER"
+    # )
     references = ArrayField(
         peewee.TextField,
-        verbose_name="CVE References"
+        verbose_name="CVE References",
+        default=[]
     )
-    summary = peewee.TextField(
-        default="",
-        verbose_name='CVE Summary'
-    )
-    cvss = peewee.TextField(
-        default="0.0",
-        verbose_name='CVE Score'
-    )
+    # summary = peewee.TextField(
+    #     default="",
+    #     verbose_name='CVE Summary'
+    # )
+    # cvss = peewee.TextField(
+    #     default="0.0",
+    #     verbose_name='CVE Score'
+    # )
     published = peewee.DateTimeField(
         verbose_name="CVE Published time"
     )
-    modified = peewee.DateTimeField(
-        verbose_name='CVE Modified time'
-    )
+    # modified = peewee.DateTimeField(
+    #     verbose_name='CVE Modified time'
+    # )
     last_modified = peewee.DateTimeField(
         verbose_name='CVE last modified time from server'
     )
-    cvss_time = peewee.DateTimeField(
-        verbose_name='CVE Score time'
-    )
+    # cvss_time = peewee.DateTimeField(
+    #     verbose_name='CVE Score time'
+    # )
     cpe22 = ArrayField(
         peewee.TextField,
-        verbose_name='CVE CPE 2.2 Array'
+        verbose_name='CVE CPE 2.2 Array',
+        default=[]
     )
     cpe23 = ArrayField(
         peewee.TextField,
-        verbose_name='CVE CPE 2.3 Array'
+        verbose_name='CVE CPE 2.3 Array',
+        default=[]
     )
     cwe = ArrayField(
         peewee.TextField,
-        verbose_name='CVEs CWE ID'
+        verbose_name='CVEs CWE ID',
+        default=[]
     )
-    access = ArrayField(
-        peewee.TextField,
-        verbose_name='CVEs ACCESS Table'
-    )
-    impact = ArrayField(
-        peewee.TextField,
-        verbose_name='CVEs IMPACT Table'
-    )
+    # access = ArrayField(
+    #     peewee.TextField,
+    #     verbose_name='CVEs ACCESS Table'
+    # )
+    # impact = ArrayField(
+    #     peewee.TextField,
+    #     verbose_name='CVEs IMPACT Table'
+    # )
     vendors = ArrayField(
         peewee.TextField,
-        verbose_name='CVEs VENDORS Table'
+        verbose_name='CVEs VENDORS Table',
+        default=[]
     )
     def __unicode__(self):
         return "CVES"
@@ -100,19 +107,36 @@ class CVE_VULNERS(peewee.Model):
         cves_data["data_type"] = self.data_type
         cves_data["data_format"] = self.data_format
         cves_data["data_version"] = self.data_version
-        cves_data["assigner"] = self.assigner
+        # cves_data["assigner"] = self.assigner
         cves_data["references"] = self.references
-        cves_data["summary"] = self.summary
-        cves_data["cvss"] = self.cvss
+        # cves_data["summary"] = self.summary
+        # cves_data["cvss"] = self.cvss
         cves_data["published"] = self.published
-        cves_data["modified"] = self.modified
+        # cves_data["modified"] = self.modified
         cves_data["last_modified"] = self.last_modified
-        cves_data["cvss_time"] = self.cvss_time
+        # cves_data["cvss_time"] = self.cvss_time
         cves_data["cpe22"] = self.cpe22
         cves_data["cpe23"] = self.cpe23
         cves_data["cwe"] = self.cwe
-        cves_data["access"] = self.access
-        cves_data["impact"] = self.impact
-        cves_data["vendors"] = self.vendors
+        # cves_data["access"] = self.access
+        # cves_data["impact"] = self.impact
+        cves_data["vendors"] = self.convert_vendors_from_json()
         return cves_data
+
+    def save(self, *args, **kwargs):
+        json_vendors = []
+        for vendor in self.vendors:
+            json_vendors.append(json.dumps(vendor))
+
+        self.vendors = json_vendors
+
+        super(CVE_VULNERS, self).save(*args, **kwargs)
+
+    def convert_vendors_from_json(self):
+        deserealized = []
+        for vendor in self.vendors:
+            deserealized.append(json.loads(vendor))
+        return deserealized
+
+
 CVE_VULNERS.add_index(CVE_VULNERS.item)
