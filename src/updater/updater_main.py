@@ -8,15 +8,12 @@ from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 from dateutil.parser import parse as parse_datetime
 
-
 from configuration import POSTGRES
 from configuration import SOURCES
 
 from datetime import datetime
 
 from get_files import get_file
-
-
 
 database = peewee.PostgresqlDatabase(
     POSTGRES.get("database", "updater_db"),
@@ -26,7 +23,6 @@ database = peewee.PostgresqlDatabase(
     port=int(POSTGRES.get("port", 5432))
 )
 
-
 from model_info import INFO
 from model_cwe import CWE_VULNERS
 from model_npm import NPM_VULNERS
@@ -35,8 +31,8 @@ from model_cve import CVE_VULNERS
 from model_d2sec import D2SEC_VULNERS
 from model_capec import CAPEC_VULNERS
 
-
 advisories_url = SOURCES["npm"]
+
 
 # ----------------------------------------------------------------------------
 # CWE Handler
@@ -73,7 +69,7 @@ class CWEHandler(ContentHandler):
         if name == 'Description_Summary' and self.weakness_tag:
             self.description_summary_tag = False
             self.description_summary = self.description_summary + \
-                self.description_summary
+                                       self.description_summary
             self.cwe[-1]['description_summary'] = \
                 self.description_summary.replace("\n", "")
         elif name == 'Weakness':
@@ -82,6 +78,7 @@ class CWEHandler(ContentHandler):
 
 class CPEHandler(ContentHandler):
     """Class for CPEHandler redefinition"""
+
     def __init__(self):
         self.name = ""
         self.title = ""
@@ -348,32 +345,32 @@ class Item(object):
         :param data: (dict) - Item to parse
         """
         cve = data.get("cve", {})
-        self.data_type = cve.get("data_type", None)                 # Data type CVE
-        self.data_format = cve.get("data_format", None)             # Data format MITRE
-        self.data_version = cve.get("data_version", None)           # Data version like 4.0
+        self.data_type = cve.get("data_type", None)  # Data type CVE
+        self.data_format = cve.get("data_format", None)  # Data format MITRE
+        self.data_version = cve.get("data_version", None)  # Data version like 4.0
         CVE_data_meta = cve.get("CVE_data_meta", {})
-        self.id = CVE_data_meta.get("ID", None)                     # ID like CVE-2002-2446
+        self.id = CVE_data_meta.get("ID", None)  # ID like CVE-2002-2446
         affects = cve.get("affects", {})
         vendor = affects.get("vendor", {})
 
         # GET Related VENDORs
 
-        self.vendor_data = []                                       # VENDOR data (different TABLE)
+        self.vendor_data = []  # VENDOR data (different TABLE)
 
         vdata = vendor.get("vendor_data", [])
 
         for vd in vdata:
-            vendor_name = vd.get("vendor_name", None)               # vendor name - one value - VENDOR
+            vendor_name = vd.get("vendor_name", None)  # vendor name - one value - VENDOR
             product = vd.get("product", {})
             product_data = product.get("product_data", [])
 
             for pd in product_data:
-                product_name = pd.get("product_name", None)         # product name - list of products for VENDOR
+                product_name = pd.get("product_name", None)  # product name - list of products for VENDOR
                 version = pd.get("version", {})
                 version_data = version.get("version_data", [])
 
                 for vd in version_data:
-                    version_value = vd.get("version_value", None)   # version value list of versions for PRODUCT
+                    version_value = vd.get("version_value", None)  # version value list of versions for PRODUCT
 
                     # create json set
 
@@ -388,7 +385,7 @@ class Item(object):
 
         # GET CWEs
 
-        self.cwe = []                                               # CWE data (different TABLE)
+        self.cwe = []  # CWE data (different TABLE)
 
         problemtype = cve.get("problemtype", {})
         problemtype_data = problemtype.get("problemtype_data", [])
@@ -403,7 +400,7 @@ class Item(object):
 
         # GET RREFERENCEs
 
-        self.references = []                                        # REFERENCES
+        self.references = []  # REFERENCES
 
         ref = cve.get("references", {})
         reference_data = ref.get("reference_data", [])
@@ -441,7 +438,6 @@ class Item(object):
 
                 self.cpe22.append(c22)
                 self.cpe23.append(c23)
-
 
         impact = data.get("impact", {})
 
@@ -519,11 +515,13 @@ def to_string_formatted_cpe(cpe, autofill=False):
 
 def progressbar(it, prefix="Processing ", size=50):
     count = len(it)
+
     def _show(_i):
         if count != 0 and sys.stdout.isatty():
             x = int(size * _i / count)
             sys.stdout.write("%s[%s%s] %i/%i\r" % (prefix, "#" * x, " " * (size - x), _i, count))
             sys.stdout.flush()
+
     _show(0)
     for i, item in enumerate(it):
         yield item
@@ -609,6 +607,7 @@ def download_cve_modified_file():
         print('Get an JSON decode error: {}'.format(json_error))
         return None
 
+
 def parse_cve_modified_file(items=None):
     if items is None:
         items = []
@@ -616,6 +615,7 @@ def parse_cve_modified_file(items=None):
     for item in items:
         parsed_items.append(Item(item).to_json())
     return parsed_items
+
 
 def download_cve_recent_file():
     file_stream, response_info = get_file(SOURCES["cve_recent"])
@@ -628,6 +628,7 @@ def download_cve_recent_file():
         print('Get an JSON decode error: {}'.format(json_error))
         return None
 
+
 def parse_cve_recent_file(items=None):
     if items is None:
         items = []
@@ -635,6 +636,18 @@ def parse_cve_recent_file(items=None):
     for item in items:
         parsed_items.append(Item(item).to_json())
     return parsed_items
+
+
+def unify_time(dt):
+    # print(type(dt))
+    if isinstance(dt, str):
+        if 'Z' in dt:
+            dt = dt.replace('Z', '')
+
+        return parse_datetime(dt)
+    if isinstance(dt, datetime):
+        return parse_datetime(str(dt))
+
 
 # ----------------------------------------------------------------------------
 # ACTION: UPDATE CWE Database
@@ -710,15 +723,15 @@ def action_update_cwe():
 
             else:
                 if cwe_selected.name == item_name and \
-                    cwe_selected.status == item_status and \
-                    cwe_selected.weaknessabs == item_weaknessabs and \
+                        cwe_selected.status == item_status and \
+                        cwe_selected.weaknessabs == item_weaknessabs and \
                         cwe_selected.description_summary == item_description_summary:
                     pass
                 else:
                     cwe_selected.name = item_name
-                    cwe_selected.status=item_status
-                    cwe_selected.weaknessabs=item_weaknessabs
-                    cwe_selected.description_summary=item_description_summary
+                    cwe_selected.status = item_status
+                    cwe_selected.weaknessabs = item_weaknessabs
+                    cwe_selected.description_summary = item_description_summary
                     cwe_selected.save()
 
         stop_time = time.time()
@@ -738,6 +751,7 @@ def action_update_cwe():
         time_delta=0,
         message="Update Database CWE: Not modified"
     )
+
 
 # ----------------------------------------------------------------------------
 # ACTION: UPDATE CPE Database
@@ -816,8 +830,8 @@ def action_update_cpe():
 
             else:
                 if cpe_selected.title == item_title and \
-                    cpe_selected.refs == item_refs and \
-                    cpe_selected.cpe22 == item_cpe22 and \
+                        cpe_selected.refs == item_refs and \
+                        cpe_selected.cpe22 == item_cpe22 and \
                         cpe_selected.cpe23 == item_cpe23:
                     pass
 
@@ -845,6 +859,7 @@ def action_update_cpe():
         time_delta=0,
         message="Update Database CPE: Not modified"
     )
+
 
 # ----------------------------------------------------------------------------
 # ACTION: UPDATE D2SEC Database
@@ -936,6 +951,7 @@ def action_update_d2sec():
         message="Update Database D2SEC: Not modified"
     )
 
+
 # ----------------------------------------------------------------------------
 # ACTION: UPDATE CAPEC Database
 # ----------------------------------------------------------------------------
@@ -995,7 +1011,7 @@ def action_update_capec():
 
             for i in range(0, len(item_related_weakness)):
                 item_related_weakness[i] = ''.join(filter(lambda x: x.isdigit(), item_related_weakness[i]))
-                item_related_weakness[i] = 'CWE-'+item_related_weakness[i]
+                item_related_weakness[i] = 'CWE-' + item_related_weakness[i]
 
             capec_selected = CAPEC_VULNERS.get_or_none(CAPEC_VULNERS.item == item_id)
 
@@ -1012,9 +1028,9 @@ def action_update_capec():
 
             else:
                 if capec_selected.name == item_name and \
-                    capec_selected.summary == item_summary and \
-                    capec_selected.prerequisites == item_prerequisites and \
-                    capec_selected.solutions == item_solutions and \
+                        capec_selected.summary == item_summary and \
+                        capec_selected.prerequisites == item_prerequisites and \
+                        capec_selected.solutions == item_solutions and \
                         capec_selected.related_weakness == item_related_weakness:
                     pass
                 else:
@@ -1075,7 +1091,6 @@ def action_update_npm():
         info.last_modified = now
         info.save()
 
-
         for item in progressbar(parsed_items, prefix="Update Database NPM: "):
             item_id = "NPM-" + str(item["id"])
             item_created_at = item.get("created_at", now) if item.get("created_at", now) is not None else ""
@@ -1085,8 +1100,10 @@ def action_update_npm():
             item_module_name = item.get("module_name", "") if item.get("module_name", "") is not None else ""
             item_publish_date = item.get("publish_date", "") if item.get("publish_date", "") is not None else ""
             item_cves = item.get("cves", []) if item.get("cves", []) is not None else []
-            item_vulnerable_versions = item.get("item_vulnerable_versions", "") if item.get("item_vulnerable_versions", "") is not None else ""
-            item_patched_versions = item.get("patched_versions", "") if item.get("patched_versions", "") is not None else ""
+            item_vulnerable_versions = item.get("item_vulnerable_versions", "") if item.get("item_vulnerable_versions",
+                                                                                            "") is not None else ""
+            item_patched_versions = item.get("patched_versions", "") if item.get("patched_versions",
+                                                                                 "") is not None else ""
             item_slug = item.get("slug", "") if item.get("slug", "") is not None else ""
             item_overview = item.get("overview", "") if item.get("overview", "") is not None else ""
             item_recommendation = item.get("recommendation", "") if item.get("recommendation", "") is not None else ""
@@ -1127,27 +1144,27 @@ def action_update_npm():
 
             else:
                 if npm_selected.created_at == item_created_at and \
-                    npm_selected.updated_at == item_updated_at and \
-                    npm_selected.title == item_title and \
-                    npm_selected.author == item_author and \
-                    npm_selected.module_name == item_module_name and \
-                    npm_selected.publish_date == item_publish_date and \
-                    npm_selected.cves == item_cves and \
-                    npm_selected.vulnerable_versions == item_vulnerable_versions and \
-                    npm_selected.patched_versions == item_patched_versions and \
-                    npm_selected.slug == item_slug and \
-                    npm_selected.overview == item_overview and \
-                    npm_selected.recomendation == item_recommendation and \
-                    npm_selected.references == item_references and \
-                    npm_selected.legacy_slug == item_legacy_slug and \
-                    npm_selected.allowed_scopes == item_allowed_scopes and \
-                    npm_selected.cvss_vector == item_cvss_vector and \
-                    npm_selected.cvss_score == item_cvss_score and \
+                        npm_selected.updated_at == item_updated_at and \
+                        npm_selected.title == item_title and \
+                        npm_selected.author == item_author and \
+                        npm_selected.module_name == item_module_name and \
+                        npm_selected.publish_date == item_publish_date and \
+                        npm_selected.cves == item_cves and \
+                        npm_selected.vulnerable_versions == item_vulnerable_versions and \
+                        npm_selected.patched_versions == item_patched_versions and \
+                        npm_selected.slug == item_slug and \
+                        npm_selected.overview == item_overview and \
+                        npm_selected.recomendation == item_recommendation and \
+                        npm_selected.references == item_references and \
+                        npm_selected.legacy_slug == item_legacy_slug and \
+                        npm_selected.allowed_scopes == item_allowed_scopes and \
+                        npm_selected.cvss_vector == item_cvss_vector and \
+                        npm_selected.cvss_score == item_cvss_score and \
                         npm_selected.cwe == item_cwe:
                     pass
                 else:
                     npm_selected.created_at = item_created_at
-                    npm_selected.updated_at =item_updated_at
+                    npm_selected.updated_at = item_updated_at
                     npm_selected.title = item_title
                     npm_selected.author = item_author
                     npm_selected.module_name = item_module_name
@@ -1184,9 +1201,11 @@ def action_update_npm():
         message="Update Database NPM: Unable to get advisories from server"
     )
 
+
 # ----------------------------------------------------------------------------
 # ACTION: UPDATE CVE Database
 # ----------------------------------------------------------------------------
+
 
 def action_update_cve():
     database.connect()
@@ -1196,20 +1215,108 @@ def action_update_cve():
     CVE_VULNERS.create_table()
 
     start_time = time.time()
+    now = datetime.strptime(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
+
     parsed_items = []
 
     modified_items = download_cve_modified_file()
-    modified_parsed = parse_cve_modified_file()
+    modified_parsed = parse_cve_modified_file(modified_items)
     recent_items = download_cve_recent_file()
-    recent_parsed = parse_cve_recent_file()
+    recent_parsed = parse_cve_recent_file(recent_items)
 
+    for item in progressbar(modified_parsed, prefix="Update Database MODIFIED: "):
+        item = json.loads(item)
 
-    # for modified
+        item_cvssv2_access_complexity = item.get("cvssv2", {}).get("accessComplexity", "")
+        item_cvssv2_access_vector = item.get("cvssv2", {}).get("accessVector", "")
+        item_cvssv2_authentication = item.get("cvssv2", {}).get("authentication", "")
+        item_cvssv2_availability_impact = item.get("cvssv2", {}).get("availabilityImpact", "")
+        item_cvssv2_base_score = item.get("cvssv2", {}).get("baseScore", "")
+        item_cvssv2_confidentiality_impact = item.get("cvssv2", {}).get("confidentialityImpact", "")
+        item_cvssv2_exploitability_score = item.get("cvssv2", {}).get("exploitabilityScore", "")
+        item_cvssv2_impact_score = item.get("cvssv2", {}).get("impactScore", "")
+        item_cvssv2_integrity_impact = item.get("cvssv2", {}).get("integrityImpact", "")
+        item_cvssv2_obtain_all_privilege = item.get("cvssv2", {}).get("obtainAllPrivilege", False)
+        item_cvssv2_obtain_other_privilege = item.get("cvssv2", {}).get("obtainOtherPrivilege", False)
+        item_cvssv2_obtain_user_privilege = item.get("cvssv2", {}).get("obtainUserPrivilege", False)
+        item_cvssv2_severity = item.get("cvssv2", {}).get("severity", "")
+        item_cvssv2_user_interaction_required = item.get("cvssv2", {}).get("userInteractionRequired", False)
+        item_cvssv2_vector_string = item.get("cvssv2", {}).get("vectorString", "")
+        item_cvssv2_version = item.get("cvssv2", {}).get("version", "")
 
+        item_cvssv3_attack_complexity = item.get("cvssv3", {}).get("attackComplexity", "")
+        item_cvssv3_attack_vector = item.get("cvssv3", {}).get("attackVector", "")
+        item_cvssv3_availability_impact = item.get("cvssv3", {}).get("availabilityImpact", "")
+        item_cvssv3_base_score = item.get("cvssv3", {}).get("baseScore", "")
+        item_cvssv3_base_severity = item.get("cvssv3", {}).get("baseSeverity", "")
+        item_cvssv3_confidentiality_impact = item.get("cvssv3", {}).get("confidentialityImpact", "")
+        item_cvssv3_exploitability_score = item.get("cvssv3", {}).get("exploitabilityScore", "")
+        item_cvssv3_impact_score = item.get("cvssv3", {}).get("impactScore", "")
+        item_cvssv3_integrity_impact = item.get("cvssv3", {}).get("integrityImpact", "")
+        item_cvssv3_privileges_required = item.get("cvssv3", {}).get("privilegesRequired", "")
+        item_cvssv3_scope = item.get("cvssv3", {}).get("scope", "")
+        item_cvssv3_user_interaction = item.get("cvssv3", {}).get("userInteraction", "")
+        item_cvssv3_vectorString = item.get("cvssv3", {}).get("vectorString", "")
+        item_cvssv3_version = item.get("cvssv3", {}).get("version", "")
+
+        item_data_format = item.get("data_format", "")
+        item_data_type = item.get("data_type", "")
+        item_data_version = item.get("data_version", "")
+        item_description = item.get("description", "")
+        item_id = "MODIFIED-" + item["id"]
+        item_last_modified_date = item.get("lastModifiedDate", now)
+        item_published_date = item.get("publishedDate", now)
+
+        item_references = item.get("references", [])
+        item_vendor_data = item.get("vendor_data", [])  # CHECK IT
+        item_cpe22 = item.get("cpe22", [])
+        item_cpe23 = item.get("cpe23", [])
+
+        item_cwe = item.get("cwe", [])
+
+        modified_selected = CVE_VULNERS.get_or_none(CVE_VULNERS.item == item_id)
+
+        if modified_selected is None:
+            modified_created = CVE_VULNERS(
+                item=item_id,
+                data_type=item_data_type,
+                data_format=item_data_format,
+                data_version=item_data_version,
+                references=item_references,
+                published=item_published_date,
+                last_modified=item_last_modified_date,
+                cpe22=item_cpe22,
+                cpe23=item_cpe23,
+                cwe=item_cwe,
+                vendors=item_vendor_data
+            )
+            modified_created.save()
+
+        else:
+            if modified_selected.data['data_type'] == item_data_type and \
+                    modified_selected.data['data_format'] == item_data_format and \
+                    modified_selected.data['data_version'] == item_data_version and \
+                    modified_selected.data['references'] == item_references and \
+                    unify_time(modified_selected.data['published']) == unify_time(item_published_date) and \
+                    unify_time(modified_selected.data['last_modified']) == unify_time(item_last_modified_date) and \
+                    modified_selected.data['cpe22'] == item_cpe22 and \
+                    modified_selected.data['cpe23'] == item_cpe23 and \
+                    modified_selected.data['cwe'] == item_cwe and \
+                    modified_selected.data['vendors'] == item_vendor_data:
+                pass
+            else:
+                modified_selected.data_format = item_data_format
+                modified_selected.data_version = item_data_version
+                modified_selected.references = item_references
+                modified_selected.published = unify_time(item_published_date)
+                modified_selected.last_modified = unify_time(item_last_modified_date)
+                modified_selected.cpe22 = item_cpe22
+                modified_selected.cpe23 = item_cpe23
+                modified_selected.cwe = item_cwe
+                modified_selected.vendors = item_vendor_data
+                modified_selected.save()
 
     # for recent
-
-
 
     database.close()
 
@@ -1220,12 +1327,10 @@ def action_update_cve():
     )
 
 
-
 if __name__ == '__main__':
     # print(action_update_cwe())
     # print(action_update_d2sec())
     # print(action_update_cpe())
-
 
     # capec -> related_weakness -> array ID of CWE
     # capec -> related_weakness -> links
