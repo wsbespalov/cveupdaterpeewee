@@ -638,13 +638,22 @@ def parse_cve_recent_file(items=None):
     return parsed_items
 
 
+def convert_list_data_to_json(data):
+    if isinstance(data, list):
+        serialized = []
+        for element in data:
+            serialized.append(json.dumps(element))
+        return serialized
+    else:
+        return []
+
+
 def unify_time(dt):
-    # print(type(dt))
     if isinstance(dt, str):
         if 'Z' in dt:
             dt = dt.replace('Z', '')
-
         return parse_datetime(dt)
+
     if isinstance(dt, datetime):
         return parse_datetime(str(dt))
 
@@ -1063,6 +1072,7 @@ def action_update_capec():
 # ACTION: UPDATE NPM Database
 # ----------------------------------------------------------------------------
 
+
 def action_update_npm():
     database.connect()
 
@@ -1221,6 +1231,7 @@ def action_update_cve():
 
     modified_items = download_cve_modified_file()
     modified_parsed = parse_cve_modified_file(modified_items)
+
     recent_items = download_cve_recent_file()
     recent_parsed = parse_cve_recent_file(recent_items)
 
@@ -1268,7 +1279,7 @@ def action_update_cve():
         item_published_date = item.get("publishedDate", now)
 
         item_references = item.get("references", [])
-        item_vendor_data = item.get("vendor_data", [])  # CHECK IT
+        item_vendor_data = item.get("vendor_data", [])
         item_cpe22 = item.get("cpe22", [])
         item_cpe23 = item.get("cpe23", [])
 
@@ -1288,7 +1299,7 @@ def action_update_cve():
                 cpe22=item_cpe22,
                 cpe23=item_cpe23,
                 cwe=item_cwe,
-                vendors=item_vendor_data
+                vendors=convert_list_data_to_json(item_vendor_data)
             )
             modified_created.save()
 
@@ -1323,7 +1334,7 @@ def action_update_cve():
     return dict(
         items=0,
         time_delta=0,
-        message="Update Database NPM: Unable to get advisories from server"
+        message="Update Database CVE: Unable to get advisories from server"
     )
 
 

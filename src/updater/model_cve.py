@@ -120,23 +120,18 @@ class CVE_VULNERS(peewee.Model):
         cves_data["cwe"] = self.cwe
         # cves_data["access"] = self.access
         # cves_data["impact"] = self.impact
-        cves_data["vendors"] = self.convert_vendors_from_json()
+        cves_data["vendors"] = self.convert_list_data_from_json(self.vendors)
         return cves_data
 
-    def save(self, *args, **kwargs):
-        json_vendors = []
-        for vendor in self.vendors:
-            json_vendors.append(json.dumps(vendor))
-
-        self.vendors = json_vendors
-
-        super(CVE_VULNERS, self).save(*args, **kwargs)
-
-    def convert_vendors_from_json(self):
-        deserealized = []
-        for vendor in self.vendors:
-            deserealized.append(json.loads(vendor))
-        return deserealized
+    @staticmethod
+    def convert_list_data_from_json(data):
+        if isinstance(data, list):
+            deserialized = []
+            for element in data:
+                deserialized.append(json.loads(element))
+            return deserialized
+        else:
+            return []
 
 
 CVE_VULNERS.add_index(CVE_VULNERS.item)
