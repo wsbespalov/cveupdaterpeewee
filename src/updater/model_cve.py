@@ -26,47 +26,38 @@ class CVE_VULNERS(peewee.Model):
         default="",
         verbose_name="CVE ID"
     )
-    data_type = peewee.TextField(
-        default="",
-        verbose_name="CVE Data Type"
-    )
     data_format = peewee.TextField(
         default="",
         verbose_name="CVE Data Format"
+    )
+    data_type = peewee.TextField(
+        default="",
+        verbose_name="CVE Data Type"
     )
     data_version = peewee.TextField(
         default="",
         verbose_name="CVE Data Version"
     )
-    # assigner = peewee.TextField(
-    #     default="",
-    #     verbose_name="CVE ASSIGNER"
-    # )
+    description = peewee.TextField(
+        default="",
+        verbose_name="CVE Description"
+    )
+    last_modified = peewee.DateTimeField(
+        verbose_name='CVE last modified time from server'
+    )
+    published = peewee.DateTimeField(
+        verbose_name="CVE Published time"
+    )
     references = ArrayField(
         peewee.TextField,
         verbose_name="CVE References",
         default=[]
     )
-    # summary = peewee.TextField(
-    #     default="",
-    #     verbose_name='CVE Summary'
-    # )
-    # cvss = peewee.TextField(
-    #     default="0.0",
-    #     verbose_name='CVE Score'
-    # )
-    published = peewee.DateTimeField(
-        verbose_name="CVE Published time"
+    vendors = ArrayField(
+        peewee.TextField,
+        verbose_name='CVEs VENDORS Table',
+        default=[]
     )
-    # modified = peewee.DateTimeField(
-    #     verbose_name='CVE Modified time'
-    # )
-    last_modified = peewee.DateTimeField(
-        verbose_name='CVE last modified time from server'
-    )
-    # cvss_time = peewee.DateTimeField(
-    #     verbose_name='CVE Score time'
-    # )
     cpe22 = ArrayField(
         peewee.TextField,
         verbose_name='CVE CPE 2.2 Array',
@@ -82,23 +73,129 @@ class CVE_VULNERS(peewee.Model):
         verbose_name='CVEs CWE ID',
         default=[]
     )
-    # access = ArrayField(
-    #     peewee.TextField,
-    #     verbose_name='CVEs ACCESS Table'
-    # )
-    # impact = ArrayField(
-    #     peewee.TextField,
-    #     verbose_name='CVEs IMPACT Table'
-    # )
-    vendors = ArrayField(
-        peewee.TextField,
-        verbose_name='CVEs VENDORS Table',
-        default=[]
+    cvssv2_access_complexity = peewee.TextField(
+        verbose_name="CVSS v.2 Access Complexity Metrics",
+        default=""
     )
+    cvssv2_access_vector = peewee.TextField(
+        verbose_name="CVSS v.2 Access Vector Metrics",
+        default=""
+    )
+    cvssv2_authentication = peewee.TextField(
+        verbose_name="CVSS v.2 Authentication Metrics",
+        default=""
+    )
+    cvssv2_availability_impact = peewee.TextField(
+        verbose_name="CVSS v.2 Availability Impact Metrics",
+        default=""
+    )
+    cvssv2_base_score = peewee.TextField(
+        verbose_name="CVSS v.2 Base Score Metrics",
+        default=""
+    )
+    cvssv2_confidentiality_impact = peewee.TextField(
+        verbose_name="CVSS v.2 Confidentiality Impact Metrics",
+        default=""
+    )
+    cvssv2_exploitability_score = peewee.TextField(
+        verbose_name="CVSS v.2 Exploitability Score Metrics",
+        default=""
+    )
+    cvssv2_impact_score = peewee.TextField(
+        verbose_name="CVSS v.2 Impact Score Metrics",
+        default=""
+    )
+    cvssv2_integrity_impact = peewee.TextField(
+        verbose_name="CVSS v.2 Impact Score Metrics",
+        default=""
+    )
+    cvssv2_obtain_all_privilege = peewee.BooleanField(
+        verbose_name="CVSS v.2 Obtain All Privilege Metrics"
+    )
+    cvssv2_obtain_other_privilege = peewee.BooleanField(
+        verbose_name="CVSS v.2 Obtain Other Privilege Metrics"
+    )
+    cvssv2_obtain_user_privilege = peewee.BooleanField(
+        verbose_name="CVSS v.2 Obtain User Privilege Metrics"
+    )
+    cvssv2_severity = peewee.TextField(
+        verbose_name="CVSS v.2 Severity Metrics",
+        default=""
+    )
+    cvssv2_user_interaction_required = peewee.BooleanField(
+        verbose_name="CVSS v.2 User Interaction Metrics"
+    )
+    cvssv2_vector_string = peewee.TextField(
+        verbose_name="CVSS v.2 Vector String",
+        default=""
+    )
+    cvssv2_version = peewee.TextField(
+        verbose_name="CVSS v.2 Version",
+        default=""
+    )
+    cvssv3_attack_complexity = peewee.TextField(
+        verbose_name="CVSS v.3 Attack Complexity Metrics",
+        default=""
+    )
+    cvssv3_attack_vector = peewee.TextField(
+        verbose_name="CVSS v.3 Attack Vector Metrics",
+        default=""
+    )
+    cvssv3_availability_impact = peewee.TextField(
+        verbose_name="CVSS v.3 Availability Impact Metrics",
+        default=""
+    )
+    cvssv3_base_score = peewee.TextField(
+        verbose_name="CVSS v.3 Base Score Metrics",
+        default=""
+    )
+    cvssv3_base_severity = peewee.TextField(
+        verbose_name="CVSS v.3 Base Severity Metrics",
+        default=""
+    )
+    cvssv3_confidentiality_impact = peewee.TextField(
+        verbose_name="CVSS v.3 Confidentiality Impact Metrics",
+        default=""
+    )
+    cvssv3_exploitability_score = peewee.TextField(
+        verbose_name="CVSS v.3 Exploitability Score Metrics",
+        default=""
+    )
+    cvssv3_impact_score = peewee.TextField(
+        verbose_name="CVSS v.3 Impact Score Metrics",
+        default=""
+    )
+    cvssv3_integrity_impact = peewee.TextField(
+        verbose_name="CVSS v.3 Integrity Impact Metrics",
+        default=""
+    )
+    cvssv3_privileges_required = peewee.TextField(
+        verbose_name="CVSS v.3 Privileges Required Metrics",
+        default=""
+    )
+    cvssv3_scope = peewee.TextField(
+        verbose_name="CVSS v.3 Scope Metrics",
+        default=""
+    )
+    cvssv3_user_interaction = peewee.TextField(
+        verbose_name="CVSS v.3 User Interaction Metrics",
+        default=""
+    )
+    cvssv3_vector_string = peewee.TextField(
+        verbose_name="CVSS v.3 Vector String",
+        default=""
+    )
+    cvssv3_version = peewee.TextField(
+        verbose_name="CVSS v.3 Version",
+        default=""
+    )
+
     def __unicode__(self):
         return "CVES"
+
     def __str__(self):
         return self.item
+
     @property
     def data(self):
         cves_data = {}
@@ -107,19 +204,12 @@ class CVE_VULNERS(peewee.Model):
         cves_data["data_type"] = self.data_type
         cves_data["data_format"] = self.data_format
         cves_data["data_version"] = self.data_version
-        # cves_data["assigner"] = self.assigner
         cves_data["references"] = self.references
-        # cves_data["summary"] = self.summary
-        # cves_data["cvss"] = self.cvss
         cves_data["published"] = self.published
-        # cves_data["modified"] = self.modified
         cves_data["last_modified"] = self.last_modified
-        # cves_data["cvss_time"] = self.cvss_time
         cves_data["cpe22"] = self.cpe22
         cves_data["cpe23"] = self.cpe23
         cves_data["cwe"] = self.cwe
-        # cves_data["access"] = self.access
-        # cves_data["impact"] = self.impact
         cves_data["vendors"] = self.convert_list_data_from_json(self.vendors)
         return cves_data
 
