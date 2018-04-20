@@ -109,20 +109,20 @@ class CVE_VULNERS(peewee.Model):
         verbose_name="CVSS v.2 Impact Score Metrics",
         default=""
     )
-    cvssv2_obtain_all_privilege = peewee.BooleanField(
+    cvssv2_obtain_all_privilege = peewee.TextField(
         verbose_name="CVSS v.2 Obtain All Privilege Metrics"
     )
-    cvssv2_obtain_other_privilege = peewee.BooleanField(
+    cvssv2_obtain_other_privilege = peewee.TextField(
         verbose_name="CVSS v.2 Obtain Other Privilege Metrics"
     )
-    cvssv2_obtain_user_privilege = peewee.BooleanField(
+    cvssv2_obtain_user_privilege = peewee.TextField(
         verbose_name="CVSS v.2 Obtain User Privilege Metrics"
     )
     cvssv2_severity = peewee.TextField(
         verbose_name="CVSS v.2 Severity Metrics",
         default=""
     )
-    cvssv2_user_interaction_required = peewee.BooleanField(
+    cvssv2_user_interaction_required = peewee.TextField(
         verbose_name="CVSS v.2 User Interaction Metrics"
     )
     cvssv2_vector_string = peewee.TextField(
