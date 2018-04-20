@@ -1,6 +1,8 @@
 SOURCES = {
     "cve_modified": "https://nvd.nist.gov/feeds/json/cve/1.0/nvdcve-1.0-modified.json.gz",
     "cve_recent": "https://nvd.nist.gov/feeds/json/cve/1.0/nvdcve-1.0-recent.json.gz",
+    "cve_base": "https://nvd.nist.gov/feeds/json/cve/1.0/nvdcve-1.0-",
+    "cve_base_postfix": ".json.gz",
     "cpe22": "https://static.nvd.nist.gov/feeds/xml/cpe/dictionary/official-cpe-dictionary_v2.2.xml.zip",
     "cpe23": "https://static.nvd.nist.gov/feeds/xml/cpe/dictionary/official-cpe-dictionary_v2.3.xml.zip",
     "cwe": "http://cwe.mitre.org/data/xml/cwec_v2.8.xml.zip",
@@ -10,9 +12,11 @@ SOURCES = {
     "npm": "https://api.nodesecurity.io/advisories",
 }
 
+START_YEAR = 2018
+
 POSTGRES = {
-    "user": 'postgres',
-    "password": 'password',
+    "user": 'admin',
+    "password": '123',
     "database": "updater_db",
     "host": "localhost",
     "port": "5432"
