@@ -1634,6 +1634,9 @@ def action_update_cve():
         message="Update Database CVE: Complete."
     )
 
+def action_populate_cve():
+    pass
+
 
 if __name__ == '__main__':
     # print(action_update_cwe())
