@@ -1654,14 +1654,22 @@ def action_update_cve():
                     recent_selected.save()
                     pass
 
-    stop_time = time.time()
+        stop_time = time.time()
+
+        database.close()
+
+        return dict(
+            items=count,
+            time_delta=stop_time - start_time,
+            message="Update Database CVE: Complete."
+        )
 
     database.close()
 
     return dict(
-        items=count,
-        time_delta=stop_time - start_time,
-        message="Update Database CVE: Complete."
+        items=0,
+        time_delta=0,
+        message="Update Database CVE: Not modified"
     )
 
 
