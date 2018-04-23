@@ -12,7 +12,7 @@ SOURCES = {
     "npm": "https://api.nodesecurity.io/advisories",
 }
 
-START_YEAR = 2018
+START_YEAR = 2002
 
 POSTGRES = {
     "user": 'admin',
