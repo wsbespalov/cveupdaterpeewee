@@ -1,7 +1,10 @@
+base==1.0.4
 cached-property==1.4.2
 certifi==2018.1.18
 chardet==3.0.4
 click==6.7
+cpe==1.2.1
+future==0.16.0
 idna==2.6
 mock==2.0.0
 pbr==4.0.2
@@ -11,6 +14,8 @@ psycopg2==2.7.4
 psycopg2-binary==2.7.4
 python-dateutil==2.7.2
 redis==2.10.6
+redis-limpyd==1.2
 requests==2.18.4
 six==1.11.0
 urllib3==1.22
+vy==3.3.1
