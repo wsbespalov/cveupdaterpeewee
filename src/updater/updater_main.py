@@ -30,6 +30,7 @@ from model_cpe import CPE_VULNERS
 from model_cve import CVE_VULNERS
 from model_d2sec import D2SEC_VULNERS
 from model_capec import CAPEC_VULNERS
+from model_vulners import VULNERABILITIES
 
 advisories_url = SOURCES["npm"]
 
@@ -697,6 +698,7 @@ def unify_bool(param):
     elif isinstance(param, type(None)):
         return 'false'
 
+
 # ----------------------------------------------------------------------------
 # ACTION: UPDATE CWE Database
 # ----------------------------------------------------------------------------
@@ -806,6 +808,7 @@ def action_update_cwe():
 # ACTION: UPDATE CPE Database
 # ----------------------------------------------------------------------------
 
+
 def action_update_cpe():
     database.connect()
 
@@ -914,6 +917,7 @@ def action_update_cpe():
 # ACTION: UPDATE D2SEC Database
 # ----------------------------------------------------------------------------
 
+
 def action_update_d2sec():
     database.connect()
 
@@ -1004,6 +1008,7 @@ def action_update_d2sec():
 # ----------------------------------------------------------------------------
 # ACTION: UPDATE CAPEC Database
 # ----------------------------------------------------------------------------
+
 
 def action_update_capec():
     database.connect()
@@ -1292,7 +1297,7 @@ def action_update_cve():
 
             item = json.loads(item)
 
-            item_id = "MODIFIED-" + item["id"]
+            item_id = item["id"]
             item_data_format = item.get("data_format", "")
             item_data_type = item.get("data_type", "")
             item_data_version = item.get("data_version", "")
@@ -1496,7 +1501,7 @@ def action_update_cve():
 
             item = json.loads(item)
 
-            item_id = "RECENT-" + item["id"]
+            item_id = item["id"]
             item_data_format = item.get("data_format", "")
             item_data_type = item.get("data_type", "")
             item_data_version = item.get("data_version", "")
@@ -1941,6 +1946,146 @@ def action_populate_cve():
     )
 
 
+# ----------------------------------------------------------------------------
+# ACTION: Make vulnerabilities table in Postgres
+# ----------------------------------------------------------------------------
+
+import cpe as cpe_module
+
+
+def action_make_vulnerabilities_table():
+    def filter_cpe_string(element):
+        result = {
+            "component": None,
+            "version": None
+        }
+
+        try:
+            c22 = cpe_module.CPE(element, cpe_module.CPE.VERSION_2_2)
+        except ValueError as value_error:
+            try:
+                c22 = cpe_module.CPE(element, cpe_module.CPE.VERSION_2_3)
+            except ValueError as another_value_error:
+                try:
+                    c22 = cpe_module.CPE(element, cpe_module.CPE.VERSION_UNDEFINED)
+                except NotImplementedError as not_implemented_error:
+                    c22 = None
+
+        c22_product = c22.get_product() if c22 is not None else []
+        c22_version = c22.get_version() if c22 is not None else []
+        result["component"] = c22_product[0] if isinstance(c22_product, list) and len(c22_product) > 0 else None
+        result["version"] = c22_version[0] if isinstance(c22_version, list) and len(c22_version) > 0 else None
+
+        return result
+
+    def search_by_component_and_version(component, version):
+        return list(VULNERABILITIES.select().where(
+            (VULNERABILITIES.component==component) &
+            (VULNERABILITIES.version==version)
+        ))
+
+    def check_version_of_component(element):
+        if str(element["component"]).__eq__(""):
+            return None
+        if element["version"] is not None:
+            if str(element["version"]).__eq__(""):
+                return None
+            if str(element["version"]).__eq__("*"):
+                return None
+            return element
+        else:
+            return None
+
+    ###
+
+    result = dict(
+        items=0,
+        time_delta=0,
+        message=""
+    )
+
+    database.connect()
+
+    VULNERABILITIES.create_table()
+
+    start_time = time.time()
+    count = 0
+
+    all_cves = CVE_VULNERS.select()
+
+    for cve in progressbar(all_cves):
+        cve_data = cve.data
+        cpes22 = cve_data["cpe22"]
+        # for cpe elements
+        for cpe in cpes22:
+            # parse cpe string
+            cpe_element = filter_cpe_string(cpe)
+
+            count += 1
+
+            # find one of many cpes
+            if cpe_element["component"] is not None and \
+                    cpe_element["version"] is not None:
+
+                # check, if this component:version already exists
+                cpe_selected = search_by_component_and_version(
+                    cpe_element["component"],
+                    cpe_element["version"]
+                )
+
+                # if not None
+                if isinstance(cpe_selected, list):
+                    if len(cpe_selected) == 0:
+                        # check version
+
+                        if check_version_of_component(cpe_element) is None:
+                            break
+
+                        # Create
+                        cpe_created = VULNERABILITIES(
+                            component=cpe_element["component"],
+                            version=cpe_element["version"],
+                            published=cve_data["published"],
+                            modified=cve_data["last_modified"],
+                            description=cve_data["description"],
+                            references=cve_data["references"],
+                            cve=cve_data["cve"],
+                            cwe=cve_data["cwe"],
+                            cpe22=cpe
+
+                            # fill next fields
+                        )
+                        cpe_created.save()
+                    else:
+                        # Update
+                        pass
+                pass
+            pass
+        pass
+
+    result["time_delta"] = time.time() - start_time
+    result["items"] = count
+    result["message"] = "Complete"
+
+    database.close()
+
+    return result
+
+
+# ----------------------------------------------------------------------------
+# ACTION: Make index table in Redis for Vulnerabilities Table from Postgres
+# ----------------------------------------------------------------------------
+
+
+def action_make_index_for_vulnerabilities_table():
+    pass
+
+
+# ----------------------------------------------------------------------------
+# ACTION: POPULATE CVE Database
+# ----------------------------------------------------------------------------
+
+
 if __name__ == '__main__':
     # print(action_update_cwe())
     # print(action_update_d2sec())
@@ -1953,6 +2098,8 @@ if __name__ == '__main__':
     #
     # print(action_update_npm())
     # print(action_update_cve())
-    print(action_populate_cve())
+    # print(action_populate_cve())
+
+    print(action_make_vulnerabilities_table())
 
     pass
