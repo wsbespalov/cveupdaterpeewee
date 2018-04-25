@@ -1,6 +1,6 @@
 import peewee
 from playhouse.postgres_ext import ArrayField
-
+from datetime import datetime
 import json
 
 from configuration import POSTGRES
@@ -43,9 +43,11 @@ class CVE_VULNERS(peewee.Model):
         verbose_name="CVE Description"
     )
     last_modified = peewee.DateTimeField(
+        default=datetime.now,
         verbose_name='CVE last modified time from server'
     )
     published = peewee.DateTimeField(
+        default=datetime.now,
         verbose_name="CVE Published time"
     )
     references = ArrayField(
