@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import redis
 import peewee
 import requests
 from xml.sax import make_parser
@@ -10,6 +11,7 @@ from dateutil.parser import parse as parse_datetime
 
 from configuration import POSTGRES
 from configuration import SOURCES, START_YEAR
+from configuration import REDIS
 
 from datetime import datetime
 
@@ -23,6 +25,14 @@ database = peewee.PostgresqlDatabase(
     port=int(POSTGRES.get("port", 5432))
 )
 
+cache = redis.StrictRedis(
+    host=REDIS["host"],
+    port=REDIS["port"],
+    db=REDIS["database"]
+)
+
+cache_indexer_collection_mask = REDIS["collections"]["vulnerabilities"]
+
 from model_info import INFO
 from model_cwe import CWE_VULNERS
 from model_npm import NPM_VULNERS
@@ -30,6 +40,7 @@ from model_cpe import CPE_VULNERS
 from model_cve import CVE_VULNERS
 from model_d2sec import D2SEC_VULNERS
 from model_capec import CAPEC_VULNERS
+from model_vulners import VULNERABILITIES
 
 advisories_url = SOURCES["npm"]
 
@@ -698,201 +709,6 @@ def unify_bool(param):
         return 'false'
 
 
-def cve_loop(parsed_item, action='Update', db_name='CVE'):
-    count = 0
-    now = datetime.strptime(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
-
-    for item in progressbar(parsed_item, prefix="{} Database {}: ".format(action, db_name)):
-        count += 1
-
-        item = json.loads(item)
-
-        item_id = item["id"]
-        item_data_format = item.get("data_format", "")
-        item_data_type = item.get("data_type", "")
-        item_data_version = item.get("data_version", "")
-        item_description = item.get("description", "")
-        item_last_modified_date = item.get("lastModifiedDate", now)
-        item_published_date = item.get("publishedDate", now)
-        item_references = item.get("references", [])
-        item_vendor_data = item.get("vendor_data", [])
-        item_cpe22 = item.get("cpe22", [])
-        item_cpe23 = item.get("cpe23", [])
-        item_cwe = item.get("cwe", [])
-
-        item_cvssv2_access_complexity = item.get("cvssv2", {}).get("accessComplexity", "")
-        item_cvssv2_access_vector = item.get("cvssv2", {}).get("accessVector", "")
-        item_cvssv2_authentication = item.get("cvssv2", {}).get("authentication", "")
-        item_cvssv2_availability_impact = item.get("cvssv2", {}).get("availabilityImpact", "")
-        item_cvssv2_base_score = item.get("cvssv2", {}).get("baseScore", "")
-        item_cvssv2_confidentiality_impact = item.get("cvssv2", {}).get("confidentialityImpact", "")
-        item_cvssv2_exploitability_score = item.get("cvssv2", {}).get("exploitabilityScore", "")
-        item_cvssv2_impact_score = item.get("cvssv2", {}).get("impactScore", "")
-        item_cvssv2_integrity_impact = item.get("cvssv2", {}).get("integrityImpact", "")
-        item_cvssv2_obtain_all_privilege = item.get("cvssv2", {}).get("obtainAllPrivilege", "false")
-        item_cvssv2_obtain_other_privilege = item.get("cvssv2", {}).get("obtainOtherPrivilege", 'false')
-        item_cvssv2_obtain_user_privilege = item.get("cvssv2", {}).get("obtainUserPrivilege", 'false')
-        item_cvssv2_severity = item.get("cvssv2", {}).get("severity", "")
-        item_cvssv2_user_interaction_required = item.get("cvssv2", {}).get("userInteractionRequired", 'false')
-        item_cvssv2_vector_string = item.get("cvssv2", {}).get("vectorString", "")
-        item_cvssv2_version = item.get("cvssv2", {}).get("version", "")
-
-        item_cvssv3_attack_complexity = item.get("cvssv3", {}).get("attackComplexity", "")
-        item_cvssv3_attack_vector = item.get("cvssv3", {}).get("attackVector", "")
-        item_cvssv3_availability_impact = item.get("cvssv3", {}).get("availabilityImpact", "")
-        item_cvssv3_base_score = item.get("cvssv3", {}).get("baseScore", "")
-        item_cvssv3_base_severity = item.get("cvssv3", {}).get("baseSeverity", "")
-        item_cvssv3_confidentiality_impact = item.get("cvssv3", {}).get("confidentialityImpact", "")
-        item_cvssv3_exploitability_score = item.get("cvssv3", {}).get("exploitabilityScore", "")
-        item_cvssv3_impact_score = item.get("cvssv3", {}).get("impactScore", "")
-        item_cvssv3_integrity_impact = item.get("cvssv3", {}).get("integrityImpact", "")
-        item_cvssv3_privileges_required = item.get("cvssv3", {}).get("privilegesRequired", "")
-        item_cvssv3_scope = item.get("cvssv3", {}).get("scope", "")
-        item_cvssv3_user_interaction = item.get("cvssv3", {}).get("userInteraction", "")
-        item_cvssv3_vector_string = item.get("cvssv3", {}).get("vectorString", "")
-        item_cvssv3_version = item.get("cvssv3", {}).get("version", "")
-
-        selected_item = CVE_VULNERS.get_or_none(CVE_VULNERS.item == item_id)
-
-        if selected_item is None:
-            created_item = CVE_VULNERS(
-                item=item_id,
-                data_format=item_data_format,
-                data_type=item_data_type,
-                data_version=item_data_version,
-                description=item_description,
-                last_modified=item_last_modified_date,
-                published=item_published_date,
-                references=item_references,
-                vendors=convert_list_data_to_json(item_vendor_data),
-                cpe22=item_cpe22,
-                cpe23=item_cpe23,
-                cwe=item_cwe,
-                cvssv2_access_complexity=item_cvssv2_access_complexity,
-                cvssv2_access_vector=item_cvssv2_access_vector,
-                cvssv2_authentication=item_cvssv2_authentication,
-                cvssv2_availability_impact=item_cvssv2_availability_impact,
-                cvssv2_base_score=item_cvssv2_base_score,
-                cvssv2_confidentiality_impact=item_cvssv2_confidentiality_impact,
-                cvssv2_exploitability_score=item_cvssv2_exploitability_score,
-                cvssv2_impact_score=item_cvssv2_impact_score,
-                cvssv2_integrity_impact=item_cvssv2_integrity_impact,
-                cvssv2_obtain_all_privilege=item_cvssv2_obtain_all_privilege,
-                cvssv2_obtain_other_privilege=item_cvssv2_obtain_other_privilege,
-                cvssv2_obtain_user_privilege=item_cvssv2_obtain_user_privilege,
-                cvssv2_severity=item_cvssv2_severity,
-                cvssv2_user_interaction_required=item_cvssv2_user_interaction_required,
-                cvssv2_vector_string=item_cvssv2_vector_string,
-                cvssv2_version=item_cvssv2_version,
-                cvssv3_attack_complexity=item_cvssv3_attack_complexity,
-                cvssv3_attack_vector=item_cvssv3_attack_vector,
-                cvssv3_availability_impact=item_cvssv3_availability_impact,
-                cvssv3_base_score=item_cvssv3_base_score,
-                cvssv3_base_severity=item_cvssv3_base_severity,
-                cvssv3_confidentiality_impact=item_cvssv3_confidentiality_impact,
-                cvssv3_exploitability_score=item_cvssv3_exploitability_score,
-                cvssv3_impact_score=item_cvssv3_impact_score,
-                cvssv3_integrity_impact=item_cvssv3_integrity_impact,
-                cvssv3_privileges_required=item_cvssv3_privileges_required,
-                cvssv3_scope=item_cvssv3_scope,
-                cvssv3_user_interaction=item_cvssv3_user_interaction,
-                cvssv3_vector_string=item_cvssv3_vector_string,
-                cvssv3_version=item_cvssv3_version
-            )
-            created_item.save()
-        else:
-            if selected_item.data["data_format"] == item_data_format and \
-                    selected_item.data["data_type"] == item_data_type and \
-                    selected_item.data["data_version"] == item_data_version and \
-                    selected_item.data["description"] == item_description and \
-                    unify_time(selected_item.data["last_modified"]) == unify_time(item_last_modified_date) and \
-                    unify_time(selected_item.data["published"]) == unify_time(item_published_date) and \
-                    selected_item.data["references"] == item_references and \
-                    selected_item.data["vendors"] == item_vendor_data and \
-                    selected_item.data["cpe22"] == item_cpe22 and \
-                    selected_item.data["cpe23"] == item_cpe23 and \
-                    selected_item.data["cwe"] == item_cwe and \
-                    selected_item.data["cvssv2_access_complexity"] == item_cvssv2_access_complexity and \
-                    selected_item.data["cvssv2_access_vector"] == item_cvssv2_access_vector and \
-                    selected_item.data["cvssv2_authentication"] == item_cvssv2_authentication and \
-                    selected_item.data["cvssv2_availability_impact"] == item_cvssv2_availability_impact and \
-                    selected_item.data["cvssv2_base_score"] == str(item_cvssv2_base_score) and \
-                    selected_item.data["cvssv2_confidentiality_impact"] == item_cvssv2_confidentiality_impact and \
-                    selected_item.data["cvssv2_exploitability_score"] == str(item_cvssv2_exploitability_score) and \
-                    selected_item.data["cvssv2_impact_score"] == str(item_cvssv2_impact_score) and \
-                    selected_item.data["cvssv2_integrity_impact"] == item_cvssv2_integrity_impact and \
-                    unify_bool(selected_item.data["cvssv2_obtain_all_privilege"]) == unify_bool(
-                item_cvssv2_obtain_all_privilege) and \
-                    unify_bool(selected_item.data["cvssv2_obtain_other_privilege"]) == unify_bool(
-                item_cvssv2_obtain_other_privilege) and \
-                    unify_bool(selected_item.data["cvssv2_obtain_user_privilege"]) == unify_bool(
-                item_cvssv2_obtain_user_privilege) and \
-                    selected_item.data["cvssv2_severity"] == item_cvssv2_severity and \
-                    unify_bool(selected_item.data["cvssv2_user_interaction_required"]) == unify_bool(
-                item_cvssv2_user_interaction_required) and \
-                    selected_item.data["cvssv2_vector_string"] == item_cvssv2_vector_string and \
-                    selected_item.data["cvssv2_version"] == item_cvssv2_version and \
-                    selected_item.data["cvssv3_attack_complexity"] == item_cvssv3_attack_complexity and \
-                    selected_item.data["cvssv3_attack_vector"] == item_cvssv3_attack_vector and \
-                    selected_item.data["cvssv3_availability_impact"] == item_cvssv3_availability_impact and \
-                    selected_item.data["cvssv3_base_score"] == str(item_cvssv3_base_score) and \
-                    selected_item.data["cvssv3_base_severity"] == item_cvssv3_base_severity and \
-                    selected_item.data["cvssv3_confidentiality_impact"] == item_cvssv3_confidentiality_impact and \
-                    selected_item.data["cvssv3_exploitability_score"] == str(item_cvssv3_exploitability_score) and \
-                    selected_item.data["cvssv3_impact_score"] == str(item_cvssv3_impact_score) and \
-                    selected_item.data["cvssv3_integrity_impact"] == item_cvssv3_integrity_impact and \
-                    selected_item.data["cvssv3_privileges_required"] == item_cvssv3_privileges_required and \
-                    selected_item.data["cvssv3_scope"] == item_cvssv3_scope and \
-                    selected_item.data["cvssv3_user_interaction"] == item_cvssv3_user_interaction and \
-                    selected_item.data["cvssv3_vector_string"] == item_cvssv3_vector_string and \
-                    selected_item.data["cvssv3_version"] == item_cvssv3_version:
-                pass
-            else:
-                selected_item.data_format = item_data_format
-                selected_item.data_type = item_data_type
-                selected_item.data_version = item_data_version
-                selected_item.description = item_description
-                selected_item.last_modified = unify_time(item_last_modified_date)
-                selected_item.published = unify_time(item_published_date)
-                selected_item.references = item_references
-                selected_item.vendors = convert_list_data_to_json(item_vendor_data)
-                selected_item.cpe22 = item_cpe22
-                selected_item.cpe23 = item_cpe23
-                selected_item.cwe = item_cwe
-                selected_item.cvssv2_access_complexity = item_cvssv2_access_complexity
-                selected_item.cvssv2_access_vector = item_cvssv2_access_vector
-                selected_item.cvssv2_authentication = item_cvssv2_authentication
-                selected_item.cvssv2_availability_impact = item_cvssv2_availability_impact
-                selected_item.cvssv2_base_score = item_cvssv2_base_score
-                selected_item.cvssv2_confidentiality_impact = item_cvssv2_confidentiality_impact
-                selected_item.cvssv2_exploitability_score = item_cvssv2_exploitability_score
-                selected_item.cvssv2_impact_score = item_cvssv2_impact_score
-                selected_item.cvssv2_integrity_impact = item_cvssv2_integrity_impact
-                selected_item.cvssv2_obtain_all_privilege = unify_bool(item_cvssv2_obtain_all_privilege)
-                selected_item.cvssv2_obtain_other_privilege = unify_bool(item_cvssv2_obtain_other_privilege)
-                selected_item.cvssv2_obtain_user_privilege = unify_bool(item_cvssv2_obtain_user_privilege)
-                selected_item.cvssv2_severity = item_cvssv2_severity
-                selected_item.cvssv2_user_interaction_required = unify_bool(item_cvssv2_user_interaction_required)
-                selected_item.cvssv2_vector_string = item_cvssv2_vector_string
-                selected_item.cvssv2_version = item_cvssv2_version
-                selected_item.cvssv3_attack_complexity = item_cvssv3_attack_complexity
-                selected_item.cvssv3_attack_vector = item_cvssv3_attack_vector
-                selected_item.cvssv3_availability_impact = item_cvssv3_availability_impact
-                selected_item.cvssv3_base_score = item_cvssv3_base_score
-                selected_item.cvssv3_base_severity = item_cvssv3_base_severity
-                selected_item.cvssv3_confidentiality_impact = item_cvssv3_confidentiality_impact
-                selected_item.cvssv3_exploitability_score = item_cvssv3_exploitability_score
-                selected_item.cvssv3_impact_score = item_cvssv3_impact_score
-                selected_item.cvssv3_integrity_impact = item_cvssv3_integrity_impact
-                selected_item.cvssv3_privileges_required = item_cvssv3_privileges_required
-                selected_item.cvssv3_scope = item_cvssv3_scope
-                selected_item.cvssv3_user_interaction = item_cvssv3_user_interaction
-                selected_item.cvssv3_vector_string = item_cvssv3_vector_string
-                selected_item.cvssv3_version = item_cvssv3_version
-                selected_item.save()
-    return count
-
-
 # ----------------------------------------------------------------------------
 # ACTION: UPDATE CWE Database
 # ----------------------------------------------------------------------------
@@ -1002,6 +818,7 @@ def action_update_cwe():
 # ACTION: UPDATE CPE Database
 # ----------------------------------------------------------------------------
 
+
 def action_update_cpe():
     database.connect()
 
@@ -1110,6 +927,7 @@ def action_update_cpe():
 # ACTION: UPDATE D2SEC Database
 # ----------------------------------------------------------------------------
 
+
 def action_update_d2sec():
     database.connect()
 
@@ -1200,6 +1018,7 @@ def action_update_d2sec():
 # ----------------------------------------------------------------------------
 # ACTION: UPDATE CAPEC Database
 # ----------------------------------------------------------------------------
+
 
 def action_update_capec():
     database.connect()
@@ -1461,6 +1280,7 @@ def action_update_cve():
     CVE_VULNERS.create_table()
 
     start_time = time.time()
+    now = datetime.strptime(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
 
     count = 0
 
@@ -1482,7 +1302,191 @@ def action_update_cve():
         info.last_modified = last_modified
         info.save()
 
-        count = cve_loop(modified_parsed, db_name="MODIFIED")
+        for item in progressbar(modified_parsed, prefix="Update Database MODIFIED: "):
+            count += 1
+
+            item = json.loads(item)
+
+            item_id = item["id"]
+            item_data_format = item.get("data_format", "")
+            item_data_type = item.get("data_type", "")
+            item_data_version = item.get("data_version", "")
+            item_description = item.get("description", "")
+            item_last_modified_date = item.get("lastModifiedDate", now)
+            item_published_date = item.get("publishedDate", now)
+            item_references = item.get("references", [])
+            item_vendor_data = item.get("vendor_data", [])
+            item_cpe22 = item.get("cpe22", [])
+            item_cpe23 = item.get("cpe23", [])
+            item_cwe = item.get("cwe", [])
+
+            item_cvssv2_access_complexity = item.get("cvssv2", {}).get("accessComplexity", "")
+            item_cvssv2_access_vector = item.get("cvssv2", {}).get("accessVector", "")
+            item_cvssv2_authentication = item.get("cvssv2", {}).get("authentication", "")
+            item_cvssv2_availability_impact = item.get("cvssv2", {}).get("availabilityImpact", "")
+            item_cvssv2_base_score = item.get("cvssv2", {}).get("baseScore", "")
+            item_cvssv2_confidentiality_impact = item.get("cvssv2", {}).get("confidentialityImpact", "")
+            item_cvssv2_exploitability_score = item.get("cvssv2", {}).get("exploitabilityScore", "")
+            item_cvssv2_impact_score = item.get("cvssv2", {}).get("impactScore", "")
+            item_cvssv2_integrity_impact = item.get("cvssv2", {}).get("integrityImpact", "")
+            item_cvssv2_obtain_all_privilege = item.get("cvssv2", {}).get("obtainAllPrivilege", "false")
+            item_cvssv2_obtain_other_privilege = item.get("cvssv2", {}).get("obtainOtherPrivilege", 'false')
+            item_cvssv2_obtain_user_privilege = item.get("cvssv2", {}).get("obtainUserPrivilege", 'false')
+            item_cvssv2_severity = item.get("cvssv2", {}).get("severity", "")
+            item_cvssv2_user_interaction_required = item.get("cvssv2", {}).get("userInteractionRequired", 'false')
+            item_cvssv2_vector_string = item.get("cvssv2", {}).get("vectorString", "")
+            item_cvssv2_version = item.get("cvssv2", {}).get("version", "")
+
+            item_cvssv3_attack_complexity = item.get("cvssv3", {}).get("attackComplexity", "")
+            item_cvssv3_attack_vector = item.get("cvssv3", {}).get("attackVector", "")
+            item_cvssv3_availability_impact = item.get("cvssv3", {}).get("availabilityImpact", "")
+            item_cvssv3_base_score = item.get("cvssv3", {}).get("baseScore", "")
+            item_cvssv3_base_severity = item.get("cvssv3", {}).get("baseSeverity", "")
+            item_cvssv3_confidentiality_impact = item.get("cvssv3", {}).get("confidentialityImpact", "")
+            item_cvssv3_exploitability_score = item.get("cvssv3", {}).get("exploitabilityScore", "")
+            item_cvssv3_impact_score = item.get("cvssv3", {}).get("impactScore", "")
+            item_cvssv3_integrity_impact = item.get("cvssv3", {}).get("integrityImpact", "")
+            item_cvssv3_privileges_required = item.get("cvssv3", {}).get("privilegesRequired", "")
+            item_cvssv3_scope = item.get("cvssv3", {}).get("scope", "")
+            item_cvssv3_user_interaction = item.get("cvssv3", {}).get("userInteraction", "")
+            item_cvssv3_vector_string = item.get("cvssv3", {}).get("vectorString", "")
+            item_cvssv3_version = item.get("cvssv3", {}).get("version", "")
+
+            modified_selected = CVE_VULNERS.get_or_none(CVE_VULNERS.item == item_id)
+
+            if modified_selected is None:
+                modified_created = CVE_VULNERS(
+                    item=item_id,
+                    data_format=item_data_format,
+                    data_type=item_data_type,
+                    data_version=item_data_version,
+                    description=item_description,
+                    last_modified=item_last_modified_date,
+                    published=item_published_date,
+                    references=item_references,
+                    vendors=convert_list_data_to_json(item_vendor_data),
+                    cpe22=item_cpe22,
+                    cpe23=item_cpe23,
+                    cwe=item_cwe,
+                    cvssv2_access_complexity=item_cvssv2_access_complexity,
+                    cvssv2_access_vector=item_cvssv2_access_vector,
+                    cvssv2_authentication=item_cvssv2_authentication,
+                    cvssv2_availability_impact=item_cvssv2_availability_impact,
+                    cvssv2_base_score=item_cvssv2_base_score,
+                    cvssv2_confidentiality_impact=item_cvssv2_confidentiality_impact,
+                    cvssv2_exploitability_score=item_cvssv2_exploitability_score,
+                    cvssv2_impact_score=item_cvssv2_impact_score,
+                    cvssv2_integrity_impact=item_cvssv2_integrity_impact,
+                    cvssv2_obtain_all_privilege=item_cvssv2_obtain_all_privilege,
+                    cvssv2_obtain_other_privilege=item_cvssv2_obtain_other_privilege,
+                    cvssv2_obtain_user_privilege=item_cvssv2_obtain_user_privilege,
+                    cvssv2_severity=item_cvssv2_severity,
+                    cvssv2_user_interaction_required=item_cvssv2_user_interaction_required,
+                    cvssv2_vector_string=item_cvssv2_vector_string,
+                    cvssv2_version=item_cvssv2_version,
+                    cvssv3_attack_complexity=item_cvssv3_attack_complexity,
+                    cvssv3_attack_vector=item_cvssv3_attack_vector,
+                    cvssv3_availability_impact=item_cvssv3_availability_impact,
+                    cvssv3_base_score=item_cvssv3_base_score,
+                    cvssv3_base_severity=item_cvssv3_base_severity,
+                    cvssv3_confidentiality_impact=item_cvssv3_confidentiality_impact,
+                    cvssv3_exploitability_score=item_cvssv3_exploitability_score,
+                    cvssv3_impact_score=item_cvssv3_impact_score,
+                    cvssv3_integrity_impact=item_cvssv3_integrity_impact,
+                    cvssv3_privileges_required=item_cvssv3_privileges_required,
+                    cvssv3_scope=item_cvssv3_scope,
+                    cvssv3_user_interaction=item_cvssv3_user_interaction,
+                    cvssv3_vector_string=item_cvssv3_vector_string,
+                    cvssv3_version=item_cvssv3_version
+                )
+                modified_created.save()
+            else:
+                if modified_selected.data["data_format"] == item_data_format and \
+                        modified_selected.data["data_type"] == item_data_type and \
+                        modified_selected.data["data_version"] == item_data_version and \
+                        modified_selected.data["description"] == item_description and \
+                        unify_time(modified_selected.data["last_modified"]) == unify_time(item_last_modified_date) and \
+                        unify_time(modified_selected.data["published"]) == unify_time(item_published_date) and \
+                        modified_selected.data["references"] == item_references and \
+                        modified_selected.data["vendors"] == item_vendor_data and \
+                        modified_selected.data["cpe22"] == item_cpe22 and \
+                        modified_selected.data["cpe23"] == item_cpe23 and \
+                        modified_selected.data["cwe"] == item_cwe and \
+                        modified_selected.data["cvssv2_access_complexity"] == item_cvssv2_access_complexity and \
+                        modified_selected.data["cvssv2_access_vector"] == item_cvssv2_access_vector and \
+                        modified_selected.data["cvssv2_authentication"] == item_cvssv2_authentication and \
+                        modified_selected.data["cvssv2_availability_impact"] == item_cvssv2_availability_impact and \
+                        modified_selected.data["cvssv2_base_score"] == str(item_cvssv2_base_score) and \
+                        modified_selected.data["cvssv2_confidentiality_impact"] == item_cvssv2_confidentiality_impact and \
+                        modified_selected.data["cvssv2_exploitability_score"] == str(item_cvssv2_exploitability_score) and \
+                        modified_selected.data["cvssv2_impact_score"] == str(item_cvssv2_impact_score) and \
+                        modified_selected.data["cvssv2_integrity_impact"] == item_cvssv2_integrity_impact and \
+                        unify_bool(modified_selected.data["cvssv2_obtain_all_privilege"]) == unify_bool(item_cvssv2_obtain_all_privilege) and \
+                        unify_bool(modified_selected.data["cvssv2_obtain_other_privilege"]) == unify_bool(item_cvssv2_obtain_other_privilege) and \
+                        unify_bool(modified_selected.data["cvssv2_obtain_user_privilege"]) == unify_bool(item_cvssv2_obtain_user_privilege) and \
+                        modified_selected.data["cvssv2_severity"] == item_cvssv2_severity and \
+                        unify_bool(modified_selected.data["cvssv2_user_interaction_required"]) == unify_bool(item_cvssv2_user_interaction_required) and \
+                        modified_selected.data["cvssv2_vector_string"] == item_cvssv2_vector_string and \
+                        modified_selected.data["cvssv2_version"] == item_cvssv2_version and \
+                        modified_selected.data["cvssv3_attack_complexity"] == item_cvssv3_attack_complexity and \
+                        modified_selected.data["cvssv3_attack_vector"] == item_cvssv3_attack_vector and \
+                        modified_selected.data["cvssv3_availability_impact"] == item_cvssv3_availability_impact and \
+                        modified_selected.data["cvssv3_base_score"] == str(item_cvssv3_base_score) and \
+                        modified_selected.data["cvssv3_base_severity"] == item_cvssv3_base_severity and \
+                        modified_selected.data["cvssv3_confidentiality_impact"] == item_cvssv3_confidentiality_impact and \
+                        modified_selected.data["cvssv3_exploitability_score"] == str(item_cvssv3_exploitability_score) and \
+                        modified_selected.data["cvssv3_impact_score"] == str(item_cvssv3_impact_score) and \
+                        modified_selected.data["cvssv3_integrity_impact"] == item_cvssv3_integrity_impact and \
+                        modified_selected.data["cvssv3_privileges_required"] == item_cvssv3_privileges_required and \
+                        modified_selected.data["cvssv3_scope"] == item_cvssv3_scope and \
+                        modified_selected.data["cvssv3_user_interaction"] == item_cvssv3_user_interaction and \
+                        modified_selected.data["cvssv3_vector_string"] == item_cvssv3_vector_string and \
+                        modified_selected.data["cvssv3_version"] == item_cvssv3_version:
+                    pass
+                else:
+                    modified_selected.data_format = item_data_format
+                    modified_selected.data_type = item_data_type
+                    modified_selected.data_version = item_data_version
+                    modified_selected.description = item_description
+                    modified_selected.last_modified = unify_time(item_last_modified_date)
+                    modified_selected.published = unify_time(item_published_date)
+                    modified_selected.references = item_references
+                    modified_selected.vendors = convert_list_data_to_json(item_vendor_data)
+                    modified_selected.cpe22 = item_cpe22
+                    modified_selected.cpe23 = item_cpe23
+                    modified_selected.cwe = item_cwe
+                    modified_selected.cvssv2_access_complexity = item_cvssv2_access_complexity
+                    modified_selected.cvssv2_access_vector = item_cvssv2_access_vector
+                    modified_selected.cvssv2_authentication = item_cvssv2_authentication
+                    modified_selected.cvssv2_availability_impact = item_cvssv2_availability_impact
+                    modified_selected.cvssv2_base_score = item_cvssv2_base_score
+                    modified_selected.cvssv2_confidentiality_impact = item_cvssv2_confidentiality_impact
+                    modified_selected.cvssv2_exploitability_score = item_cvssv2_exploitability_score
+                    modified_selected.cvssv2_impact_score = item_cvssv2_impact_score
+                    modified_selected.cvssv2_integrity_impact = item_cvssv2_integrity_impact
+                    modified_selected.cvssv2_obtain_all_privilege = unify_bool(item_cvssv2_obtain_all_privilege)
+                    modified_selected.cvssv2_obtain_other_privilege = unify_bool(item_cvssv2_obtain_other_privilege)
+                    modified_selected.cvssv2_obtain_user_privilege = unify_bool(item_cvssv2_obtain_user_privilege)
+                    modified_selected.cvssv2_severity = item_cvssv2_severity
+                    modified_selected.cvssv2_user_interaction_required = unify_bool(item_cvssv2_user_interaction_required)
+                    modified_selected.cvssv2_vector_string = item_cvssv2_vector_string
+                    modified_selected.cvssv2_version = item_cvssv2_version
+                    modified_selected.cvssv3_attack_complexity = item_cvssv3_attack_complexity
+                    modified_selected.cvssv3_attack_vector = item_cvssv3_attack_vector
+                    modified_selected.cvssv3_availability_impact = item_cvssv3_availability_impact
+                    modified_selected.cvssv3_base_score = item_cvssv3_base_score
+                    modified_selected.cvssv3_base_severity = item_cvssv3_base_severity
+                    modified_selected.cvssv3_confidentiality_impact = item_cvssv3_confidentiality_impact
+                    modified_selected.cvssv3_exploitability_score = item_cvssv3_exploitability_score
+                    modified_selected.cvssv3_impact_score = item_cvssv3_impact_score
+                    modified_selected.cvssv3_integrity_impact = item_cvssv3_integrity_impact
+                    modified_selected.cvssv3_privileges_required = item_cvssv3_privileges_required
+                    modified_selected.cvssv3_scope = item_cvssv3_scope
+                    modified_selected.cvssv3_user_interaction = item_cvssv3_user_interaction
+                    modified_selected.cvssv3_vector_string = item_cvssv3_vector_string
+                    modified_selected.cvssv3_version = item_cvssv3_version
+                    modified_selected.save()
+                    pass
 
     recent_items, response = download_cve_recent_file()
     recent_parsed = parse_cve_recent_file(recent_items)
@@ -1502,7 +1506,191 @@ def action_update_cve():
         info.last_modified = last_modified
         info.save()
 
-        count += cve_loop(recent_parsed, db_name="RECENT")
+        for item in progressbar(recent_parsed, prefix="Update Database RECENT: "):
+            count += 1
+
+            item = json.loads(item)
+
+            item_id = item["id"]
+            item_data_format = item.get("data_format", "")
+            item_data_type = item.get("data_type", "")
+            item_data_version = item.get("data_version", "")
+            item_description = item.get("description", "")
+            item_last_modified_date = item.get("lastModifiedDate", now)
+            item_published_date = item.get("publishedDate", now)
+            item_references = item.get("references", [])
+            item_vendor_data = item.get("vendor_data", [])
+            item_cpe22 = item.get("cpe22", [])
+            item_cpe23 = item.get("cpe23", [])
+            item_cwe = item.get("cwe", [])
+
+            item_cvssv2_access_complexity = item.get("cvssv2", {}).get("accessComplexity", "")
+            item_cvssv2_access_vector = item.get("cvssv2", {}).get("accessVector", "")
+            item_cvssv2_authentication = item.get("cvssv2", {}).get("authentication", "")
+            item_cvssv2_availability_impact = item.get("cvssv2", {}).get("availabilityImpact", "")
+            item_cvssv2_base_score = item.get("cvssv2", {}).get("baseScore", "")
+            item_cvssv2_confidentiality_impact = item.get("cvssv2", {}).get("confidentialityImpact", "")
+            item_cvssv2_exploitability_score = item.get("cvssv2", {}).get("exploitabilityScore", "")
+            item_cvssv2_impact_score = item.get("cvssv2", {}).get("impactScore", "")
+            item_cvssv2_integrity_impact = item.get("cvssv2", {}).get("integrityImpact", "")
+            item_cvssv2_obtain_all_privilege = item.get("cvssv2", {}).get("obtainAllPrivilege", "false")
+            item_cvssv2_obtain_other_privilege = item.get("cvssv2", {}).get("obtainOtherPrivilege", 'false')
+            item_cvssv2_obtain_user_privilege = item.get("cvssv2", {}).get("obtainUserPrivilege", 'false')
+            item_cvssv2_severity = item.get("cvssv2", {}).get("severity", "")
+            item_cvssv2_user_interaction_required = item.get("cvssv2", {}).get("userInteractionRequired", 'false')
+            item_cvssv2_vector_string = item.get("cvssv2", {}).get("vectorString", "")
+            item_cvssv2_version = item.get("cvssv2", {}).get("version", "")
+
+            item_cvssv3_attack_complexity = item.get("cvssv3", {}).get("attackComplexity", "")
+            item_cvssv3_attack_vector = item.get("cvssv3", {}).get("attackVector", "")
+            item_cvssv3_availability_impact = item.get("cvssv3", {}).get("availabilityImpact", "")
+            item_cvssv3_base_score = item.get("cvssv3", {}).get("baseScore", "")
+            item_cvssv3_base_severity = item.get("cvssv3", {}).get("baseSeverity", "")
+            item_cvssv3_confidentiality_impact = item.get("cvssv3", {}).get("confidentialityImpact", "")
+            item_cvssv3_exploitability_score = item.get("cvssv3", {}).get("exploitabilityScore", "")
+            item_cvssv3_impact_score = item.get("cvssv3", {}).get("impactScore", "")
+            item_cvssv3_integrity_impact = item.get("cvssv3", {}).get("integrityImpact", "")
+            item_cvssv3_privileges_required = item.get("cvssv3", {}).get("privilegesRequired", "")
+            item_cvssv3_scope = item.get("cvssv3", {}).get("scope", "")
+            item_cvssv3_user_interaction = item.get("cvssv3", {}).get("userInteraction", "")
+            item_cvssv3_vector_string = item.get("cvssv3", {}).get("vectorString", "")
+            item_cvssv3_version = item.get("cvssv3", {}).get("version", "")
+
+            recent_selected = CVE_VULNERS.get_or_none(CVE_VULNERS.item == item_id)
+
+            if recent_selected is None:
+                recent_selected = CVE_VULNERS(
+                    item=item_id,
+                    data_format=item_data_format,
+                    data_type=item_data_type,
+                    data_version=item_data_version,
+                    description=item_description,
+                    last_modified=item_last_modified_date,
+                    published=item_published_date,
+                    references=item_references,
+                    vendors=convert_list_data_to_json(item_vendor_data),
+                    cpe22=item_cpe22,
+                    cpe23=item_cpe23,
+                    cwe=item_cwe,
+                    cvssv2_access_complexity=item_cvssv2_access_complexity,
+                    cvssv2_access_vector=item_cvssv2_access_vector,
+                    cvssv2_authentication=item_cvssv2_authentication,
+                    cvssv2_availability_impact=item_cvssv2_availability_impact,
+                    cvssv2_base_score=item_cvssv2_base_score,
+                    cvssv2_confidentiality_impact=item_cvssv2_confidentiality_impact,
+                    cvssv2_exploitability_score=item_cvssv2_exploitability_score,
+                    cvssv2_impact_score=item_cvssv2_impact_score,
+                    cvssv2_integrity_impact=item_cvssv2_integrity_impact,
+                    cvssv2_obtain_all_privilege=item_cvssv2_obtain_all_privilege,
+                    cvssv2_obtain_other_privilege=item_cvssv2_obtain_other_privilege,
+                    cvssv2_obtain_user_privilege=item_cvssv2_obtain_user_privilege,
+                    cvssv2_severity=item_cvssv2_severity,
+                    cvssv2_user_interaction_required=item_cvssv2_user_interaction_required,
+                    cvssv2_vector_string=item_cvssv2_vector_string,
+                    cvssv2_version=item_cvssv2_version,
+                    cvssv3_attack_complexity=item_cvssv3_attack_complexity,
+                    cvssv3_attack_vector=item_cvssv3_attack_vector,
+                    cvssv3_availability_impact=item_cvssv3_availability_impact,
+                    cvssv3_base_score=item_cvssv3_base_score,
+                    cvssv3_base_severity=item_cvssv3_base_severity,
+                    cvssv3_confidentiality_impact=item_cvssv3_confidentiality_impact,
+                    cvssv3_exploitability_score=item_cvssv3_exploitability_score,
+                    cvssv3_impact_score=item_cvssv3_impact_score,
+                    cvssv3_integrity_impact=item_cvssv3_integrity_impact,
+                    cvssv3_privileges_required=item_cvssv3_privileges_required,
+                    cvssv3_scope=item_cvssv3_scope,
+                    cvssv3_user_interaction=item_cvssv3_user_interaction,
+                    cvssv3_vector_string=item_cvssv3_vector_string,
+                    cvssv3_version=item_cvssv3_version
+                )
+                recent_selected.save()
+            else:
+                if recent_selected.data["data_format"] == item_data_format and \
+                        recent_selected.data["data_type"] == item_data_type and \
+                        recent_selected.data["data_version"] == item_data_version and \
+                        recent_selected.data["description"] == item_description and \
+                        unify_time(recent_selected.data["last_modified"]) == unify_time(item_last_modified_date) and \
+                        unify_time(recent_selected.data["published"]) == unify_time(item_published_date) and \
+                        recent_selected.data["references"] == item_references and \
+                        recent_selected.data["vendors"] == item_vendor_data and \
+                        recent_selected.data["cpe22"] == item_cpe22 and \
+                        recent_selected.data["cpe23"] == item_cpe23 and \
+                        recent_selected.data["cwe"] == item_cwe and \
+                        recent_selected.data["cvssv2_access_complexity"] == item_cvssv2_access_complexity and \
+                        recent_selected.data["cvssv2_access_vector"] == item_cvssv2_access_vector and \
+                        recent_selected.data["cvssv2_authentication"] == item_cvssv2_authentication and \
+                        recent_selected.data["cvssv2_availability_impact"] == item_cvssv2_availability_impact and \
+                        recent_selected.data["cvssv2_base_score"] == str(item_cvssv2_base_score) and \
+                        recent_selected.data["cvssv2_confidentiality_impact"] == item_cvssv2_confidentiality_impact and \
+                        recent_selected.data["cvssv2_exploitability_score"] == str(item_cvssv2_exploitability_score) and \
+                        recent_selected.data["cvssv2_impact_score"] == str(item_cvssv2_impact_score) and \
+                        recent_selected.data["cvssv2_integrity_impact"] == item_cvssv2_integrity_impact and \
+                        unify_bool(recent_selected.data["cvssv2_obtain_all_privilege"]) == unify_bool(item_cvssv2_obtain_all_privilege) and \
+                        unify_bool(recent_selected.data["cvssv2_obtain_other_privilege"]) == unify_bool(item_cvssv2_obtain_other_privilege) and \
+                        unify_bool(recent_selected.data["cvssv2_obtain_user_privilege"]) == unify_bool(item_cvssv2_obtain_user_privilege) and \
+                        recent_selected.data["cvssv2_severity"] == item_cvssv2_severity and \
+                        unify_bool(recent_selected.data["cvssv2_user_interaction_required"]) == unify_bool(item_cvssv2_user_interaction_required) and \
+                        recent_selected.data["cvssv2_vector_string"] == item_cvssv2_vector_string and \
+                        recent_selected.data["cvssv2_version"] == item_cvssv2_version and \
+                        recent_selected.data["cvssv3_attack_complexity"] == item_cvssv3_attack_complexity and \
+                        recent_selected.data["cvssv3_attack_vector"] == item_cvssv3_attack_vector and \
+                        recent_selected.data["cvssv3_availability_impact"] == item_cvssv3_availability_impact and \
+                        recent_selected.data["cvssv3_base_score"] == str(item_cvssv3_base_score) and \
+                        recent_selected.data["cvssv3_base_severity"] == item_cvssv3_base_severity and \
+                        recent_selected.data["cvssv3_confidentiality_impact"] == item_cvssv3_confidentiality_impact and \
+                        recent_selected.data["cvssv3_exploitability_score"] == str(item_cvssv3_exploitability_score) and \
+                        recent_selected.data["cvssv3_impact_score"] == str(item_cvssv3_impact_score) and \
+                        recent_selected.data["cvssv3_integrity_impact"] == item_cvssv3_integrity_impact and \
+                        recent_selected.data["cvssv3_privileges_required"] == item_cvssv3_privileges_required and \
+                        recent_selected.data["cvssv3_scope"] == item_cvssv3_scope and \
+                        recent_selected.data["cvssv3_user_interaction"] == item_cvssv3_user_interaction and \
+                        recent_selected.data["cvssv3_vector_string"] == item_cvssv3_vector_string and \
+                        recent_selected.data["cvssv3_version"] == item_cvssv3_version:
+                    pass
+                else:
+                    recent_selected.data_format = item_data_format
+                    recent_selected.data_type = item_data_type
+                    recent_selected.data_version = item_data_version
+                    recent_selected.description = item_description
+                    recent_selected.last_modified = unify_time(item_last_modified_date)
+                    recent_selected.published = unify_time(item_published_date)
+                    recent_selected.references = item_references
+                    recent_selected.vendors = convert_list_data_to_json(item_vendor_data)
+                    recent_selected.cpe22 = item_cpe22
+                    recent_selected.cpe23 = item_cpe23
+                    recent_selected.cwe = item_cwe
+                    recent_selected.cvssv2_access_complexity = item_cvssv2_access_complexity
+                    recent_selected.cvssv2_access_vector = item_cvssv2_access_vector
+                    recent_selected.cvssv2_authentication = item_cvssv2_authentication
+                    recent_selected.cvssv2_availability_impact = item_cvssv2_availability_impact
+                    recent_selected.cvssv2_base_score = item_cvssv2_base_score
+                    recent_selected.cvssv2_confidentiality_impact = item_cvssv2_confidentiality_impact
+                    recent_selected.cvssv2_exploitability_score = item_cvssv2_exploitability_score
+                    recent_selected.cvssv2_impact_score = item_cvssv2_impact_score
+                    recent_selected.cvssv2_integrity_impact = item_cvssv2_integrity_impact
+                    recent_selected.cvssv2_obtain_all_privilege = unify_bool(item_cvssv2_obtain_all_privilege)
+                    recent_selected.cvssv2_obtain_other_privilege = unify_bool(item_cvssv2_obtain_other_privilege)
+                    recent_selected.cvssv2_obtain_user_privilege = unify_bool(item_cvssv2_obtain_user_privilege)
+                    recent_selected.cvssv2_severity = item_cvssv2_severity
+                    recent_selected.cvssv2_user_interaction_required = unify_bool(item_cvssv2_user_interaction_required)
+                    recent_selected.cvssv2_vector_string = item_cvssv2_vector_string
+                    recent_selected.cvssv2_version = item_cvssv2_version
+                    recent_selected.cvssv3_attack_complexity = item_cvssv3_attack_complexity
+                    recent_selected.cvssv3_attack_vector = item_cvssv3_attack_vector
+                    recent_selected.cvssv3_availability_impact = item_cvssv3_availability_impact
+                    recent_selected.cvssv3_base_score = item_cvssv3_base_score
+                    recent_selected.cvssv3_base_severity = item_cvssv3_base_severity
+                    recent_selected.cvssv3_confidentiality_impact = item_cvssv3_confidentiality_impact
+                    recent_selected.cvssv3_exploitability_score = item_cvssv3_exploitability_score
+                    recent_selected.cvssv3_impact_score = item_cvssv3_impact_score
+                    recent_selected.cvssv3_integrity_impact = item_cvssv3_integrity_impact
+                    recent_selected.cvssv3_privileges_required = item_cvssv3_privileges_required
+                    recent_selected.cvssv3_scope = item_cvssv3_scope
+                    recent_selected.cvssv3_user_interaction = item_cvssv3_user_interaction
+                    recent_selected.cvssv3_vector_string = item_cvssv3_vector_string
+                    recent_selected.cvssv3_version = item_cvssv3_version
+                    recent_selected.save()
+                    pass
 
         stop_time = time.time()
 
@@ -1568,7 +1756,194 @@ def action_populate_cve():
             info.last_modified = last_modified
             info.save()
 
-            count += cve_loop(parsed_cve_item, action="Populate", db_name="CVE-{}".format(year))
+            for item in progressbar(parsed_cve_item, prefix="Update Database CVE-{}: ".format(year)):
+                count += 1
+
+                print(count)
+
+                item = json.loads(item)
+
+                item_id = item["id"]
+                item_data_format = item.get("data_format", "")
+                item_data_type = item.get("data_type", "")
+                item_data_version = item.get("data_version", "")
+                item_description = item.get("description", "")
+                item_last_modified_date = item.get("lastModifiedDate", now)
+                item_published_date = item.get("publishedDate", now)
+                item_references = item.get("references", [])
+                item_vendor_data = item.get("vendor_data", [])
+                item_cpe22 = item.get("cpe22", [])
+                item_cpe23 = item.get("cpe23", [])
+                item_cwe = item.get("cwe", [])
+
+                item_cvssv2_access_complexity = item.get("cvssv2", {}).get("accessComplexity", "")
+                item_cvssv2_access_vector = item.get("cvssv2", {}).get("accessVector", "")
+                item_cvssv2_authentication = item.get("cvssv2", {}).get("authentication", "")
+                item_cvssv2_availability_impact = item.get("cvssv2", {}).get("availabilityImpact", "")
+                item_cvssv2_base_score = item.get("cvssv2", {}).get("baseScore", "")
+                item_cvssv2_confidentiality_impact = item.get("cvssv2", {}).get("confidentialityImpact", "")
+                item_cvssv2_exploitability_score = item.get("cvssv2", {}).get("exploitabilityScore", "")
+                item_cvssv2_impact_score = item.get("cvssv2", {}).get("impactScore", "")
+                item_cvssv2_integrity_impact = item.get("cvssv2", {}).get("integrityImpact", "")
+                item_cvssv2_obtain_all_privilege = item.get("cvssv2", {}).get("obtainAllPrivilege", "false")
+                item_cvssv2_obtain_other_privilege = item.get("cvssv2", {}).get("obtainOtherPrivilege", 'false')
+                item_cvssv2_obtain_user_privilege = item.get("cvssv2", {}).get("obtainUserPrivilege", 'false')
+                item_cvssv2_severity = item.get("cvssv2", {}).get("severity", "")
+                item_cvssv2_user_interaction_required = item.get("cvssv2", {}).get("userInteractionRequired", 'false')
+                item_cvssv2_vector_string = item.get("cvssv2", {}).get("vectorString", "")
+                item_cvssv2_version = item.get("cvssv2", {}).get("version", "")
+
+                item_cvssv3_attack_complexity = item.get("cvssv3", {}).get("attackComplexity", "")
+                item_cvssv3_attack_vector = item.get("cvssv3", {}).get("attackVector", "")
+                item_cvssv3_availability_impact = item.get("cvssv3", {}).get("availabilityImpact", "")
+                item_cvssv3_base_score = item.get("cvssv3", {}).get("baseScore", "")
+                item_cvssv3_base_severity = item.get("cvssv3", {}).get("baseSeverity", "")
+                item_cvssv3_confidentiality_impact = item.get("cvssv3", {}).get("confidentialityImpact", "")
+                item_cvssv3_exploitability_score = item.get("cvssv3", {}).get("exploitabilityScore", "")
+                item_cvssv3_impact_score = item.get("cvssv3", {}).get("impactScore", "")
+                item_cvssv3_integrity_impact = item.get("cvssv3", {}).get("integrityImpact", "")
+                item_cvssv3_privileges_required = item.get("cvssv3", {}).get("privilegesRequired", "")
+                item_cvssv3_scope = item.get("cvssv3", {}).get("scope", "")
+                item_cvssv3_user_interaction = item.get("cvssv3", {}).get("userInteraction", "")
+                item_cvssv3_vector_string = item.get("cvssv3", {}).get("vectorString", "")
+                item_cvssv3_version = item.get("cvssv3", {}).get("version", "")
+
+                cve_selected = CVE_VULNERS.get_or_none(CVE_VULNERS.item == item_id)
+
+                if cve_selected is None:
+                    cve_selected = CVE_VULNERS(
+                        item=item_id,
+                        data_format=item_data_format,
+                        data_type=item_data_type,
+                        data_version=item_data_version,
+                        description=item_description,
+                        last_modified=item_last_modified_date,
+                        published=item_published_date,
+                        references=item_references,
+                        vendors=convert_list_data_to_json(item_vendor_data),
+                        cpe22=item_cpe22,
+                        cpe23=item_cpe23,
+                        cwe=item_cwe,
+                        cvssv2_access_complexity=item_cvssv2_access_complexity,
+                        cvssv2_access_vector=item_cvssv2_access_vector,
+                        cvssv2_authentication=item_cvssv2_authentication,
+                        cvssv2_availability_impact=item_cvssv2_availability_impact,
+                        cvssv2_base_score=item_cvssv2_base_score,
+                        cvssv2_confidentiality_impact=item_cvssv2_confidentiality_impact,
+                        cvssv2_exploitability_score=item_cvssv2_exploitability_score,
+                        cvssv2_impact_score=item_cvssv2_impact_score,
+                        cvssv2_integrity_impact=item_cvssv2_integrity_impact,
+                        cvssv2_obtain_all_privilege=item_cvssv2_obtain_all_privilege,
+                        cvssv2_obtain_other_privilege=item_cvssv2_obtain_other_privilege,
+                        cvssv2_obtain_user_privilege=item_cvssv2_obtain_user_privilege,
+                        cvssv2_severity=item_cvssv2_severity,
+                        cvssv2_user_interaction_required=item_cvssv2_user_interaction_required,
+                        cvssv2_vector_string=item_cvssv2_vector_string,
+                        cvssv2_version=item_cvssv2_version,
+                        cvssv3_attack_complexity=item_cvssv3_attack_complexity,
+                        cvssv3_attack_vector=item_cvssv3_attack_vector,
+                        cvssv3_availability_impact=item_cvssv3_availability_impact,
+                        cvssv3_base_score=item_cvssv3_base_score,
+                        cvssv3_base_severity=item_cvssv3_base_severity,
+                        cvssv3_confidentiality_impact=item_cvssv3_confidentiality_impact,
+                        cvssv3_exploitability_score=item_cvssv3_exploitability_score,
+                        cvssv3_impact_score=item_cvssv3_impact_score,
+                        cvssv3_integrity_impact=item_cvssv3_integrity_impact,
+                        cvssv3_privileges_required=item_cvssv3_privileges_required,
+                        cvssv3_scope=item_cvssv3_scope,
+                        cvssv3_user_interaction=item_cvssv3_user_interaction,
+                        cvssv3_vector_string=item_cvssv3_vector_string,
+                        cvssv3_version=item_cvssv3_version
+                    )
+                    cve_selected.save()
+                else:
+                    if cve_selected.data["data_format"] == item_data_format and \
+                            cve_selected.data["data_type"] == item_data_type and \
+                            cve_selected.data["data_version"] == item_data_version and \
+                            cve_selected.data["description"] == item_description and \
+                            unify_time(cve_selected.data["last_modified"]) == unify_time(item_last_modified_date) and \
+                            unify_time(cve_selected.data["published"]) == unify_time(item_published_date) and \
+                            cve_selected.data["references"] == item_references and \
+                            cve_selected.data["vendors"] == item_vendor_data and \
+                            cve_selected.data["cpe22"] == item_cpe22 and \
+                            cve_selected.data["cpe23"] == item_cpe23 and \
+                            cve_selected.data["cwe"] == item_cwe and \
+                            cve_selected.data["cvssv2_access_complexity"] == item_cvssv2_access_complexity and \
+                            cve_selected.data["cvssv2_access_vector"] == item_cvssv2_access_vector and \
+                            cve_selected.data["cvssv2_authentication"] == item_cvssv2_authentication and \
+                            cve_selected.data["cvssv2_availability_impact"] == item_cvssv2_availability_impact and \
+                            cve_selected.data["cvssv2_base_score"] == str(item_cvssv2_base_score) and \
+                            cve_selected.data["cvssv2_confidentiality_impact"] == item_cvssv2_confidentiality_impact and \
+                            cve_selected.data["cvssv2_exploitability_score"] == str(item_cvssv2_exploitability_score) and \
+                            cve_selected.data["cvssv2_impact_score"] == str(item_cvssv2_impact_score) and \
+                            cve_selected.data["cvssv2_integrity_impact"] == item_cvssv2_integrity_impact and \
+                            unify_bool(cve_selected.data["cvssv2_obtain_all_privilege"]) == unify_bool(item_cvssv2_obtain_all_privilege) and \
+                            unify_bool(cve_selected.data["cvssv2_obtain_other_privilege"]) == unify_bool(item_cvssv2_obtain_other_privilege) and \
+                            unify_bool(cve_selected.data["cvssv2_obtain_user_privilege"]) == unify_bool(item_cvssv2_obtain_user_privilege) and \
+                            cve_selected.data["cvssv2_severity"] == item_cvssv2_severity and \
+                            unify_bool(cve_selected.data["cvssv2_user_interaction_required"]) == unify_bool(item_cvssv2_user_interaction_required) and \
+                            cve_selected.data["cvssv2_vector_string"] == item_cvssv2_vector_string and \
+                            cve_selected.data["cvssv2_version"] == item_cvssv2_version and \
+                            cve_selected.data["cvssv3_attack_complexity"] == item_cvssv3_attack_complexity and \
+                            cve_selected.data["cvssv3_attack_vector"] == item_cvssv3_attack_vector and \
+                            cve_selected.data["cvssv3_availability_impact"] == item_cvssv3_availability_impact and \
+                            cve_selected.data["cvssv3_base_score"] == str(item_cvssv3_base_score) and \
+                            cve_selected.data["cvssv3_base_severity"] == item_cvssv3_base_severity and \
+                            cve_selected.data["cvssv3_confidentiality_impact"] == item_cvssv3_confidentiality_impact and \
+                            cve_selected.data["cvssv3_exploitability_score"] == str(item_cvssv3_exploitability_score) and \
+                            cve_selected.data["cvssv3_impact_score"] == str(item_cvssv3_impact_score) and \
+                            cve_selected.data["cvssv3_integrity_impact"] == item_cvssv3_integrity_impact and \
+                            cve_selected.data["cvssv3_privileges_required"] == item_cvssv3_privileges_required and \
+                            cve_selected.data["cvssv3_scope"] == item_cvssv3_scope and \
+                            cve_selected.data["cvssv3_user_interaction"] == item_cvssv3_user_interaction and \
+                            cve_selected.data["cvssv3_vector_string"] == item_cvssv3_vector_string and \
+                            cve_selected.data["cvssv3_version"] == item_cvssv3_version:
+                        pass
+                    else:
+                        cve_selected.data_format = item_data_format
+                        cve_selected.data_type = item_data_type
+                        cve_selected.data_version = item_data_version
+                        cve_selected.description = item_description
+                        cve_selected.last_modified = unify_time(item_last_modified_date)
+                        cve_selected.published = unify_time(item_published_date)
+                        cve_selected.references = item_references
+                        cve_selected.vendors = convert_list_data_to_json(item_vendor_data)
+                        cve_selected.cpe22 = item_cpe22
+                        cve_selected.cpe23 = item_cpe23
+                        cve_selected.cwe = item_cwe
+                        cve_selected.cvssv2_access_complexity = item_cvssv2_access_complexity
+                        cve_selected.cvssv2_access_vector = item_cvssv2_access_vector
+                        cve_selected.cvssv2_authentication = item_cvssv2_authentication
+                        cve_selected.cvssv2_availability_impact = item_cvssv2_availability_impact
+                        cve_selected.cvssv2_base_score = item_cvssv2_base_score
+                        cve_selected.cvssv2_confidentiality_impact = item_cvssv2_confidentiality_impact
+                        cve_selected.cvssv2_exploitability_score = item_cvssv2_exploitability_score
+                        cve_selected.cvssv2_impact_score = item_cvssv2_impact_score
+                        cve_selected.cvssv2_integrity_impact = item_cvssv2_integrity_impact
+                        cve_selected.cvssv2_obtain_all_privilege = unify_bool(item_cvssv2_obtain_all_privilege)
+                        cve_selected.cvssv2_obtain_other_privilege = unify_bool(item_cvssv2_obtain_other_privilege)
+                        cve_selected.cvssv2_obtain_user_privilege = unify_bool(item_cvssv2_obtain_user_privilege)
+                        cve_selected.cvssv2_severity = item_cvssv2_severity
+                        cve_selected.cvssv2_user_interaction_required = unify_bool(
+                        item_cvssv2_user_interaction_required)
+                        cve_selected.cvssv2_vector_string = item_cvssv2_vector_string
+                        cve_selected.cvssv2_version = item_cvssv2_version
+                        cve_selected.cvssv3_attack_complexity = item_cvssv3_attack_complexity
+                        cve_selected.cvssv3_attack_vector = item_cvssv3_attack_vector
+                        cve_selected.cvssv3_availability_impact = item_cvssv3_availability_impact
+                        cve_selected.cvssv3_base_score = item_cvssv3_base_score
+                        cve_selected.cvssv3_base_severity = item_cvssv3_base_severity
+                        cve_selected.cvssv3_confidentiality_impact = item_cvssv3_confidentiality_impact
+                        cve_selected.cvssv3_exploitability_score = item_cvssv3_exploitability_score
+                        cve_selected.cvssv3_impact_score = item_cvssv3_impact_score
+                        cve_selected.cvssv3_integrity_impact = item_cvssv3_integrity_impact
+                        cve_selected.cvssv3_privileges_required = item_cvssv3_privileges_required
+                        cve_selected.cvssv3_scope = item_cvssv3_scope
+                        cve_selected.cvssv3_user_interaction = item_cvssv3_user_interaction
+                        cve_selected.cvssv3_vector_string = item_cvssv3_vector_string
+                        cve_selected.cvssv3_version = item_cvssv3_version
+                        cve_selected.save()
+                        pass
 
     stop_time = time.time()
 
@@ -1580,6 +1955,347 @@ def action_populate_cve():
         message="Populate Database CVE: Complete."
     )
 
+
+# ----------------------------------------------------------------------------
+# ACTION: Make vulnerabilities table in Postgres
+# ----------------------------------------------------------------------------
+
+import cpe as cpe_module
+
+
+def action_make_vulnerabilities_table():
+    def filter_cpe_string(element):
+        result = {
+            "component": None,
+            "version": None
+        }
+
+        try:
+            c22 = cpe_module.CPE(element, cpe_module.CPE.VERSION_2_2)
+        except ValueError as value_error:
+            try:
+                c22 = cpe_module.CPE(element, cpe_module.CPE.VERSION_2_3)
+            except ValueError as another_value_error:
+                try:
+                    c22 = cpe_module.CPE(element, cpe_module.CPE.VERSION_UNDEFINED)
+                except NotImplementedError as not_implemented_error:
+                    c22 = None
+
+        c22_product = c22.get_product() if c22 is not None else []
+        c22_version = c22.get_version() if c22 is not None else []
+        result["component"] = c22_product[0] if isinstance(c22_product, list) and len(c22_product) > 0 else None
+        result["version"] = c22_version[0] if isinstance(c22_version, list) and len(c22_version) > 0 else None
+
+        return result
+
+    def search_by_component_and_version(component, version):
+        return list(VULNERABILITIES.select().where(
+            (VULNERABILITIES.component==component) &
+            (VULNERABILITIES.version==version)
+        ))
+
+    def check_version_of_component(element):
+        if str(element["component"]).__eq__(""):
+            return None
+        if element["version"] is not None:
+            if str(element["version"]).__eq__(""):
+                return None
+            if str(element["version"]).__eq__("*"):
+                return None
+            return element
+        else:
+            return None
+
+    ###
+
+    result = dict(
+        items=0,
+        time_delta=0,
+        message=""
+    )
+
+    database.connect()
+
+    VULNERABILITIES.create_table()
+
+    start_time = time.time()
+    count = 0
+
+    # Get all CVEs from table - make index table for its
+
+    all_cves = CVE_VULNERS.select()
+
+
+    # Drop VULNERABILITIES Table??? - oh, no! just update it!!!
+
+    # For all cves
+    for cve_element_in_all_cves in progressbar(all_cves[:1000]):
+        # Get Table raw as JSON object
+        cve_object_data_in_json = cve_element_in_all_cves.data
+
+        # Get cpe 2.2 string
+        cpes22_strings = cve_object_data_in_json["cpe22"]
+
+        # Search for cpe elements in all CVEs in cpe 2.2 string
+        for cpe_element_in_cpes22_string in cpes22_strings:
+            # Parse this cpe string
+            cpe_parsed_element = filter_cpe_string(cpe_element_in_cpes22_string)
+            # Just a count of elements
+            count += 1
+
+            # find one of many cpes
+            if cpe_parsed_element["component"] is not None and \
+                    cpe_parsed_element["version"] is not None:
+
+                # check, if this component:version already exists in VULNERABILITIES Table
+                # method return <list>
+                cpe_selected = search_by_component_and_version(
+                    cpe_parsed_element["component"],
+                    cpe_parsed_element["version"]
+                )
+
+
+
+
+                if len(cpe_selected) != 0:
+                    VULNERABILITIES.delete().where(
+                        (VULNERABILITIES.component == cpe_parsed_element["component"]) &
+                        (VULNERABILITIES.version == cpe_parsed_element["version"])
+                    )
+                else:
+                    pass
+
+
+                # check version by filter
+                if check_version_of_component(cpe_parsed_element) is None:
+                    break
+
+                # Get information from CWE
+
+                cwe_list = list(cve_object_data_in_json["cwe"])
+
+                # Create list of cwes from Table
+
+                cwe_list_items = []
+
+                # If exists
+                if len(cwe_list) > 0:
+                    # Get one item (Just CWE name) from cwes list
+                    for cwe_i in cwe_list:
+                        # Get element or None from CWE Table by CWE Name
+                        cwe_selected = CWE_VULNERS.get_or_none(
+                            CWE_VULNERS.item==cwe_i
+                        )
+                        if cwe_selected is not None:
+                            cwe_list_items.append(
+                                json.dumps(
+                                    dict(
+                                        cwe_id=cwe_i,
+                                        cwe_selected_name=cwe_selected.data["name"] if cwe_selected is not None else "",
+                                        cwe_selected_status=cwe_selected.data["status"] if cwe_selected is not None else "",
+                                        cwe_selected_weaknessabs=cwe_selected.data["weaknessabs"] if cwe_selected is not None else "",
+                                        cwe_selected_description_summary = cwe_selected.data["description_summary"] if cwe_selected is not None else "",
+                                    )
+                                )
+                            )
+                        else:
+                            # Nothing to append
+                            pass
+                # If empty CWE List - just add one empty element
+                else:
+                    cwe_list_items.append(
+                        json.dumps(
+                            dict(
+                                cwe_id="",
+                                cwe_selected_name="",
+                                cwe_selected_status = "",
+                                cwe_selected_weaknessabs = "",
+                                cwe_selected_description_summary = "",
+                            )
+                        )
+                    )
+
+                # Get information from CAPEC
+
+                # Create list of CAPEC Elements
+                capec_list_items = []
+
+                # Get CAPEC ids by CWE Names
+                for cwe_i in cwe_list_items:
+
+                    id = json.loads(cwe_i).get("cwe_id", None)
+                    if id is not None:
+                        capec_selected = CAPEC_VULNERS.get_or_none(
+                            id in CAPEC_VULNERS.related_weakness
+                        )
+                        if capec_selected is not None:
+                            capec_list_items.append(
+                                json.dumps(
+                                    dict(
+                                        capec_id=capec_selected.data["capec"] if capec_selected is not None else "",
+                                        capec_selected_name=capec_selected.data["name"] if capec_selected is not None else "",
+                                        capec_selected_summary=capec_selected.data["summary"] if capec_selected is not None else "",
+                                        capec_selected_prerequisites=capec_selected.data["prerequisites"] if capec_selected is not None else "",
+                                        capec_selected_solutions=capec_selected.data["solutions"] if capec_selected is not None else "",
+                                    )
+                                )
+                            )
+                        else:
+                            # Noting to append
+                            pass
+                    else:
+                        # Append empty list
+                        capec_list_items.append(
+                            json.dumps(
+                                dict(
+                                    capec_id="",
+                                    capec_selected_name="",
+                                    capec_selected_summary="",
+                                    capec_selected_prerequisites="",
+                                    capec_selected_solutions="",
+                                )
+                            )
+                        )
+
+                # Create if not exists
+
+                cpe_created = VULNERABILITIES(
+                    component=cpe_parsed_element["component"],
+                    version=cpe_parsed_element["version"],
+                    published=cve_object_data_in_json["published"],
+                    modified=cve_object_data_in_json["last_modified"],
+                    description=cve_object_data_in_json["description"],
+                    references=cve_object_data_in_json["references"],
+                    data_type=cve_object_data_in_json["data_type"],
+                    data_format=cve_object_data_in_json["data_format"],
+                    data_version=cve_object_data_in_json["data_version"],
+                    vendors=convert_list_data_to_json(cve_object_data_in_json["vendors"]),
+                    cve=cve_object_data_in_json["cve"],
+                    cpe22=cpe_element_in_cpes22_string,
+                    cvssv2_access_complexity=cve_object_data_in_json["cvssv2_access_complexity"],
+                    cvssv2_access_vector=cve_object_data_in_json["cvssv2_access_vector"],
+                    cvssv2_authentication=cve_object_data_in_json["cvssv2_authentication"],
+                    cvssv2_availability_impact=cve_object_data_in_json["cvssv2_availability_impact"],
+                    cvssv2_base_score=cve_object_data_in_json["cvssv2_base_score"],
+                    cvssv2_confidentiality_impact=cve_object_data_in_json["cvssv2_confidentiality_impact"],
+                    cvssv2_exploitability_score=cve_object_data_in_json["cvssv2_exploitability_score"],
+                    cvssv2_impact_score=cve_object_data_in_json["cvssv2_impact_score"],
+                    cvssv2_integrity_impact=cve_object_data_in_json["cvssv2_integrity_impact"],
+                    cvssv2_obtain_all_privilege=cve_object_data_in_json["cvssv2_obtain_all_privilege"],
+                    cvssv2_obtain_other_privilege=cve_object_data_in_json["cvssv2_obtain_other_privilege"],
+                    cvssv2_obtain_user_privilege=cve_object_data_in_json["cvssv2_obtain_user_privilege"],
+                    cvssv2_severity=cve_object_data_in_json["cvssv2_severity"],
+                    cvssv2_user_interaction_required=cve_object_data_in_json["cvssv2_user_interaction_required"],
+                    cvssv2_vector_string=cve_object_data_in_json["cvssv2_vector_string"],
+                    cvssv2_version=cve_object_data_in_json["cvssv2_version"],
+                    cvssv3_attack_complexity=cve_object_data_in_json["cvssv3_attack_complexity"],
+                    cvssv3_attack_vector=cve_object_data_in_json["cvssv3_attack_vector"],
+                    cvssv3_availability_impact=cve_object_data_in_json["cvssv3_availability_impact"],
+                    cvssv3_base_score=cve_object_data_in_json["cvssv3_base_score"],
+                    cvssv3_base_severity=cve_object_data_in_json["cvssv3_base_severity"],
+                    cvssv3_confidentiality_impact=cve_object_data_in_json["cvssv3_confidentiality_impact"],
+                    cvssv3_exploitability_score=cve_object_data_in_json["cvssv3_exploitability_score"],
+                    cvssv3_impact_score=cve_object_data_in_json["cvssv3_impact_score"],
+                    cvssv3_integrity_impact=cve_object_data_in_json["cvssv3_integrity_impact"],
+                    cvssv3_privileges_required=cve_object_data_in_json["cvssv3_privileges_required"],
+                    cvssv3_scope=cve_object_data_in_json["cvssv3_scope"],
+                    cvssv3_user_interaction=cve_object_data_in_json["cvssv3_user_interaction"],
+                    cvssv3_vector_string=cve_object_data_in_json["cvssv3_vector_string"],
+                    cvssv3_version=cve_object_data_in_json["cvssv3_version"],
+
+                    cwe=cwe_list_items,
+
+                    capec=capec_list_items,
+
+                )
+                cpe_created.save()
+
+            pass
+        pass
+
+    result["time_delta"] = time.time() - start_time
+    result["items"] = count
+    result["message"] = "Complete"
+
+    database.close()
+
+    return result
+
+
+# ----------------------------------------------------------------------------
+# ACTION: Make index table in Redis for Vulnerabilities Table from Postgres
+# ----------------------------------------------------------------------------
+
+
+def action_make_index_for_vulnerabilities_table():
+    start_time = time.time()
+    result = dict(
+        time_delta=0,
+        items=0,
+        message="Start"
+    )
+    database.connect()
+    count = 0
+
+    # Clear cache
+
+    for key in cache.keys(cache_indexer_collection_mask):
+        cache.delete(key)
+    print("Cache clear")
+
+    # Get All rows from VULNER Table
+    all_vulnerabilities = VULNERABILITIES.select()
+    print("All VULNERABILITIES selected")
+
+    for one_vulner in progressbar(all_vulnerabilities):
+        one_vulner_data = one_vulner.data
+        component = one_vulner_data["component"]
+        version = one_vulner_data["version"]
+
+        new_collection_name = ''.join([
+            cache_indexer_collection_mask,
+            component,
+            "::",
+            version
+        ])
+
+        dictionary = dict(
+            component=component,
+            version=version,
+            vuln_id=one_vulner_data["id"]
+        )
+
+        cache.hmset(
+            new_collection_name,
+            dictionary
+        )
+
+
+    result["time_delta"] = time.time() - start_time
+    result["items"] = count
+    result["message"] = "Complete"
+
+    database.close()
+    return result
+
+
+def find_component_in_cache_index(component, version=None):
+    result = None
+    query = cache_indexer_collection_mask
+    if component is not None:
+        query += component
+        query += "::"
+        if version is not None:
+            query += version
+        else:
+            query += "*"
+        record = cache.hgetall(
+            query
+        )
+        result = dict(
+            component=record
+        )
+    return result
 
 if __name__ == '__main__':
     # print(action_update_cwe())
@@ -1593,6 +2309,23 @@ if __name__ == '__main__':
     #
     # print(action_update_npm())
     # print(action_update_cve())
-    print(action_populate_cve())
+    # print(action_populate_cve())
+
+
+
+
+
+    # print(action_make_vulnerabilities_table())
+    # print(action_make_index_for_vulnerabilities_table())
+
+
+
+
+
+    start_time = time.time()
+
+    print(find_component_in_cache_index(component="solaris", version="2.6"))
+
+    print('Job time: {}'.format(time.time() - start_time))
 
     pass
