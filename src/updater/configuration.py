@@ -12,6 +12,15 @@ SOURCES = {
     "npm": "https://api.nodesecurity.io/advisories",
 }
 
+REDIS = {
+    "host": "localhost",
+    "port": 6379,
+    "database": 1,
+    "collections": {
+        "vulnerabilities": "indexer::vulnerabilities::"
+    },
+}
+
 START_YEAR = 2002
 
 POSTGRES = {
