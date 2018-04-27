@@ -26,8 +26,8 @@ database = peewee.PostgresqlDatabase(
 )
 
 
-def download_cve_modified_file():
-    file_stream, response_info = get_file(SOURCES["cve_modified"])
+def download_cve_file(source):
+    file_stream, response_info = get_file(source)
     try:
         result = json.load(file_stream)
         if "CVE_Items" in result:
@@ -38,51 +38,7 @@ def download_cve_modified_file():
         return None
 
 
-def parse_cve_modified_file(items=None):
-    if items is None:
-        items = []
-    parsed_items = []
-    for item in items:
-        parsed_items.append(Item(item).to_json())
-    return parsed_items
-
-
-def download_cve_recent_file():
-    file_stream, response_info = get_file(SOURCES["cve_recent"])
-    try:
-        result = json.load(file_stream)
-        if "CVE_Items" in result:
-            return result["CVE_Items"], response_info
-        return None
-    except json.JSONDecodeError as json_error:
-        print('Get an JSON decode error: {}'.format(json_error))
-        return None
-
-
-def parse_cve_recent_file(items=None):
-    if items is None:
-        items = []
-    parsed_items = []
-    for item in items:
-        parsed_items.append(Item(item).to_json())
-    return parsed_items
-
-
-def download_cve_file_for_year(year):
-    if isinstance(year, str):
-        source = SOURCES["cve_base"] + year + SOURCES["cve_base_postfix"]
-        file_stream, response_info = get_file(source)
-        try:
-            result = json.load(file_stream)
-            if "CVE_Items" in result:
-                return result["CVE_Items"], response_info
-            return None
-        except json.JSONDecodeError as json_error:
-            print('Get an JSON decode error: {}'.format(json_error))
-            return None
-
-
-def parse_cve_file_for_year(items=None):
+def parse_cve_file(items=None):
     if items is None:
         items = []
     parsed_items = []
@@ -324,8 +280,8 @@ def action_update_cve():
 
     count = 0
 
-    modified_items, response = download_cve_modified_file()
-    modified_parsed = parse_cve_modified_file(modified_items)
+    modified_items, response = download_cve_file(SOURCES["cve_modified"])
+    modified_parsed = parse_cve_file(modified_items)
 
     last_modified = parse_datetime(response.headers["last-modified"], ignoretz=True)
 
@@ -344,8 +300,8 @@ def action_update_cve():
 
         count += cve_loop(modified_parsed, db_name="MODIFIED")
 
-    recent_items, response = download_cve_recent_file()
-    recent_parsed = parse_cve_recent_file(recent_items)
+    recent_items, response = download_cve_file(SOURCES["cve_recent"])
+    recent_parsed = parse_cve_file(recent_items)
 
     last_modified = parse_datetime(response.headers["last-modified"], ignoretz=True)
 
@@ -400,12 +356,13 @@ def action_populate_cve():
 
         print("Populate CVE-{}".format(year))
 
-        cve_item, response = download_cve_file_for_year(str(year))
+        source = SOURCES["cve_base"] + str(year) + SOURCES["cve_base_postfix"]
+        cve_item, response = download_cve_file(source)
 
         if response.code != 200:
             print("Populate CVE-{}: Failed download".format(year))
 
-        parsed_cve_item = parse_cve_modified_file(cve_item)
+        parsed_cve_item = parse_cve_file(cve_item)
 
         last_modified = parse_datetime(response.headers["last-modified"], ignoretz=True)
 
