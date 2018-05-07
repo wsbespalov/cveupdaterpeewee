@@ -21,16 +21,16 @@ if __name__ == '__main__':
     # print(action_update_capec())
 
     # print(action_update_npm())
-    # print(action_update_cve())
+    print(action_update_cve())
     # print(action_populate_cve())
 
-    print(action_make_vulnerabilities_table())
-    print(action_make_index_for_vulnerabilities_table())
-
-    start_time = time.time()
-
-    print(find_component_in_cache_index(component="solaris", version="2.6"))
-
-    print('Job time: {}'.format(time.time() - start_time))
+    # print(action_make_vulnerabilities_table())
+    # print(action_make_index_for_vulnerabilities_table())
+    #
+    # start_time = time.time()
+    #
+    # print(find_component_in_cache_index(component="solaris", version="2.6"))
+    #
+    # print('Job time: {}'.format(time.time() - start_time))
 
     pass

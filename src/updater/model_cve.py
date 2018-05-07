@@ -1,5 +1,4 @@
 import peewee
-from playhouse.postgres_ext import ArrayField
 from datetime import datetime
 import json
 
@@ -50,28 +49,23 @@ class CVE_VULNERS(peewee.Model):
         default=datetime.now,
         verbose_name="CVE Published time"
     )
-    references = ArrayField(
-        peewee.TextField,
+    references = peewee.TextField(
         verbose_name="CVE References",
         default=[]
     )
-    vendors = ArrayField(
-        peewee.TextField,
+    vendors = peewee.TextField(
         verbose_name='CVEs VENDORS Table',
         default=[]
     )
-    cpe22 = ArrayField(
-        peewee.TextField,
+    cpe22 = peewee.TextField(
         verbose_name='CVE CPE 2.2 Array',
         default=[]
     )
-    cpe23 = ArrayField(
-        peewee.TextField,
+    cpe23 = peewee.TextField(
         verbose_name='CVE CPE 2.3 Array',
         default=[]
     )
-    cwe = ArrayField(
-        peewee.TextField,
+    cwe = peewee.TextField(
         verbose_name='CVEs CWE ID',
         default=[]
     )

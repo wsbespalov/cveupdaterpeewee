@@ -1,5 +1,6 @@
 import time
 import json
+import pika
 import peewee
 
 from datetime import datetime
@@ -90,11 +91,21 @@ def cve_loop(parsed_item, action='Update', db_name='CVE'):
         item_description = item.get("description", "")
         item_last_modified_date = item.get("lastModifiedDate", now)
         item_published_date = item.get("publishedDate", now)
+
         item_references = item.get("references", [])
+        item_references_json = {"data": item_references}
+
         item_vendor_data = item.get("vendor_data", [])
+        item_vendor_data_json = {"data": item_vendor_data}
+
         item_cpe22 = item.get("cpe22", [])
+        item_cpe22_json = {"data": item_cpe22}
+
         item_cpe23 = item.get("cpe23", [])
+        item_cpe23_json = {"data": item_cpe23}
+
         item_cwe = item.get("cwe", [])
+        item_cwe_json = {"data": item_cwe}
 
         item_cvssv2_access_complexity = item.get("cvssv2", {}).get("accessComplexity", "")
         item_cvssv2_access_vector = item.get("cvssv2", {}).get("accessVector", "")
@@ -130,6 +141,9 @@ def cve_loop(parsed_item, action='Update', db_name='CVE'):
 
         selected_item = CVE_VULNERS.get_or_none(CVE_VULNERS.item == item_id)
 
+        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        chanel = connection.channel()
+
         if selected_item is None:
             selected_item = CVE_VULNERS(
                 item=item_id,
@@ -139,11 +153,11 @@ def cve_loop(parsed_item, action='Update', db_name='CVE'):
                 description=item_description,
                 last_modified=item_last_modified_date,
                 published=item_published_date,
-                references=item_references,
-                vendors=convert_list_data_to_json(item_vendor_data),
-                cpe22=item_cpe22,
-                cpe23=item_cpe23,
-                cwe=item_cwe,
+                references=json.dumps(item_references_json),
+                vendors=json.dumps(item_vendor_data_json),
+                cpe22=json.dumps(item_cpe22_json),
+                cpe23=json.dumps(item_cpe23_json),
+                cwe=json.dumps(item_cwe_json),
                 cvssv2_access_complexity=item_cvssv2_access_complexity,
                 cvssv2_access_vector=item_cvssv2_access_vector,
                 cvssv2_authentication=item_cvssv2_authentication,
@@ -176,6 +190,9 @@ def cve_loop(parsed_item, action='Update', db_name='CVE'):
                 cvssv3_version=item_cvssv3_version
             )
             selected_item.save()
+
+            chanel.queue_declare(queue='create')
+            chanel.basic_publish(exchange='', routing_key='create', body=json.dumps(item))
         else:
             if selected_item.data["data_format"] == item_data_format and \
                     selected_item.data["data_type"] == item_data_type and \
@@ -266,6 +283,11 @@ def cve_loop(parsed_item, action='Update', db_name='CVE'):
                 selected_item.cvssv3_vector_string = item_cvssv3_vector_string
                 selected_item.cvssv3_version = item_cvssv3_version
                 selected_item.save()
+
+                chanel.queue_declare(queue='update')
+                chanel.basic_publish(exchange='', routing_key='update', body=json.dumps(item))
+
+        chanel.close()
     return count
 
 
